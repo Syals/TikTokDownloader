@@ -2,7 +2,13 @@ __pycache__/
 *.pyc
 /.venv/
 /.ruff_cache/
+/.codegraph/
 /.idea/
 /.run/
 /Volume/
 !/.github/
+*.md
+test*.py
+/tests/
+*.json
+*.html
