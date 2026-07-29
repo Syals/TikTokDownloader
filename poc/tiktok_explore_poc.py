@@ -1,9 +1,9 @@
-"""Collect paginated TikTok For You recommendations without downloading media.
+"""Collect paginated TikTok For You recommendations and download their media.
 
 The script verifies that TikTok's recommendation endpoint returns an
 ``itemList`` containing metadata and playable media URLs. It saves raw page
-responses, all collected items, and flattened metadata locally; no media is
-downloaded.
+responses, all collected items, and flattened metadata locally, then
+(optionally) batch-downloads the selected media URLs.
 
 Run from the repository root:
     uv run python poc/tiktok_explore_poc.py
@@ -12,6 +12,19 @@ Set ``TIKTOK_POC_PROXY`` to override the local proxy. Set it to an empty
 string to test a direct connection. ``TIKTOK_POC_COUNT``,
 ``TIKTOK_POC_MAX_PAGES``, and ``TIKTOK_POC_DELAY`` override the defaults of
 20 items, 5 pages, and 1.5 seconds between pages.
+
+Media download is enabled by default and can be tuned with:
+
+- ``TIKTOK_POC_DOWNLOAD``: ``0`` disables the download phase (fetch only).
+- ``TIKTOK_POC_URL_MODE``: ``play_url`` (default), ``download_url``, or
+  ``all`` selects which media URL field(s) to download.
+- ``TIKTOK_POC_DOWNLOAD_DIR``: output directory (default ``poc/downloads``).
+- ``TIKTOK_POC_CONCURRENCY``: parallel downloads (default 5).
+- ``TIKTOK_POC_MAX_RETRY``: per-file retries (default 3).
+- ``TIKTOK_POC_CHUNK_KB``: streaming chunk size in KiB (default 1024).
+
+TikTok CDN URLs are signed and expire within hours, so download soon after
+fetching. A 403 response means the link expired; re-fetch the metadata.
 """
 
 import asyncio
@@ -27,7 +40,7 @@ import httpx
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.custom import DATA_HEADERS_TIKTOK  # noqa: E402
+from src.custom import DATA_HEADERS_TIKTOK, DOWNLOAD_HEADERS_TIKTOK  # noqa: E402
 from src.encrypt import XBogus, XGnarly  # noqa: E402
 from src.interface.template import APITikTok  # noqa: E402
 
@@ -39,6 +52,12 @@ DEFAULT_PAGE_DELAY = 1.5
 ITEM_KEYS = ("itemList", "item_list", "items", "aweme_list")
 RECOMMEND_ENDPOINT = "https://www.tiktok.com/api/recommend/item_list/"
 RECOMMEND_FROM_PAGE = "foryou"
+
+DEFAULT_DOWNLOAD_DIR = Path(__file__).with_name("downloads")
+DEFAULT_CONCURRENCY = 5
+DEFAULT_MAX_RETRY = 3
+DEFAULT_CHUNK_KB = 1024
+URL_MODES = ("play_url", "download_url", "all")
 
 
 def cookie_string(cookie: dict[str, str]) -> str:
@@ -194,6 +213,130 @@ def headers(cookie: dict[str, str]) -> dict[str, str]:
     }
 
 
+def download_headers(user_agent: str) -> dict[str, str]:
+    """Headers for the TikTok CDN, with the session User-Agent for signing."""
+    return DOWNLOAD_HEADERS_TIKTOK | {"User-Agent": user_agent}
+
+
+def select_urls(item: dict, mode: str) -> list[tuple[str, str]]:
+    """Return ``(label, url)`` pairs for the selected mode, skipping empty URLs."""
+    pairs = []
+    if mode in ("play_url", "all") and (url := item.get("play_url")):
+        pairs.append(("play", url))
+    if mode in ("download_url", "all") and (url := item.get("download_url")):
+        pairs.append(("download", url))
+    return pairs
+
+
+def safe_name(item: dict, label: str | None) -> str:
+    """Build a filesystem-safe base name from author and id."""
+    author = str(item.get("author_id") or item.get("author_nickname") or "unknown")
+    item_id = str(item.get("id") or "unknown")
+    base = f"{author}_{item_id}"
+    if label:
+        base = f"{base}_{label}"
+    # Keep letters/digits and safe punctuation; replace the rest with "_".
+    return "".join(c if (c.isalnum() or c in "._-") else "_" for c in base)
+
+
+async def download_one(
+    client: httpx.AsyncClient,
+    url: str,
+    dest: Path,
+    headers: dict[str, str],
+    max_retry: int,
+    chunk_size: int,
+) -> bool:
+    """Stream one media URL to ``dest`` with Range-based resume and retries."""
+    if dest.exists() and dest.stat().st_size > 0:
+        print(f"  SKIP (exists): {dest.name}")
+        return True
+    temp = dest.with_suffix(dest.suffix + ".downloading")
+    for attempt in range(1, max_retry + 1):
+        position = temp.stat().st_size if temp.exists() else 0
+        try:
+            async with client.stream(
+                "GET",
+                url,
+                headers=headers | ({"Range": f"bytes={position}-"} if position else {}),
+            ) as response:
+                response.raise_for_status()
+                # 200 means the server ignored Range: restart from scratch.
+                mode = "ab" if response.status_code == 206 and position else "wb"
+                with open(temp, mode) as file:
+                    async for chunk in response.aiter_bytes(chunk_size):
+                        file.write(chunk)
+            temp.replace(dest)
+            print(f"  DONE: {dest.name} ({dest.stat().st_size} bytes)")
+            return True
+        except httpx.HTTPStatusError as error:
+            print(f"  HTTP {error.response.status_code}: {dest.name}")
+            if error.response.status_code in (403, 404, 410):
+                print("  Link may have expired; re-fetch the metadata.")
+                return False
+        except httpx.RequestError as error:
+            print(f"  RETRY {attempt}/{max_retry} {dest.name}: {error}")
+    return False
+
+
+async def download_phase(
+    client: httpx.AsyncClient,
+    metadata: list[dict],
+    mode: str,
+    download_dir: Path,
+    concurrency: int,
+    max_retry: int,
+    chunk_size: int,
+    user_agent: str,
+) -> None:
+    download_dir.mkdir(parents=True, exist_ok=True)
+    headers = download_headers(user_agent)
+    semaphore = asyncio.Semaphore(concurrency)
+    # In "all" mode every item downloads both variants with distinct labels;
+    # otherwise a single URL keeps the plain base name.
+    single = mode != "all"
+
+    async def worker(item: dict, label: str, url: str) -> bool:
+        name = safe_name(item, None if single else label)
+        dest = download_dir / f"{name}.mp4"
+        async with semaphore:
+            return await download_one(client, url, dest, headers, max_retry, chunk_size)
+
+    tasks = [
+        worker(item, label, url)
+        for item in metadata
+        for label, url in select_urls(item, mode)
+    ]
+    if not tasks:
+        print("Download: no media URLs to download.")
+        return
+    print(
+        f"\nDownload: {len(tasks)} file(s) -> {download_dir} "
+        f"(mode={mode}, concurrency={concurrency})"
+    )
+    results = await asyncio.gather(*tasks)
+    ok = sum(1 for r in results if r)
+    print(f"Download summary: {ok} succeeded, {len(results) - ok} failed.")
+    manifest = [
+        {
+            "id": item.get("id"),
+            "author_id": item.get("author_id"),
+            "file": f"{safe_name(item, None if single else label)}.mp4",
+            "url_label": label,
+            "ok": ok_flag,
+        }
+        for (item, label), ok_flag in zip(
+            (
+                (item, label)
+                for item in metadata
+                for label, _ in select_urls(item, mode)
+            ),
+            results,
+        )
+    ]
+    print(f"Saved download manifest: {save_json('download_manifest', manifest)}")
+
+
 async def probe_profile(
     client: httpx.AsyncClient,
     cookie: dict[str, str],
@@ -320,6 +463,11 @@ def nonnegative_float_from_env(name: str, default: float) -> float:
     return value if value >= 0 else default
 
 
+def url_mode_from_env(name: str, default: str = "play_url") -> str:
+    value = os.getenv(name, default).strip().lower()
+    return value if value in URL_MODES else default
+
+
 async def main() -> int:
     if not SETTINGS_PATH.is_file():
         print(f"FATAL: settings file not found: {SETTINGS_PATH}")
@@ -337,10 +485,25 @@ async def main() -> int:
     count = positive_int_from_env("TIKTOK_POC_COUNT", DEFAULT_COUNT)
     max_pages = positive_int_from_env("TIKTOK_POC_MAX_PAGES", DEFAULT_MAX_PAGES)
     delay = nonnegative_float_from_env("TIKTOK_POC_DELAY", DEFAULT_PAGE_DELAY)
+    download_enabled = os.getenv("TIKTOK_POC_DOWNLOAD", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+    )
+    url_mode = url_mode_from_env("TIKTOK_POC_URL_MODE")
+    download_dir = Path(os.getenv("TIKTOK_POC_DOWNLOAD_DIR", str(DEFAULT_DOWNLOAD_DIR)))
+    concurrency = positive_int_from_env("TIKTOK_POC_CONCURRENCY", DEFAULT_CONCURRENCY)
+    max_retry = positive_int_from_env("TIKTOK_POC_MAX_RETRY", DEFAULT_MAX_RETRY)
+    chunk_size = positive_int_from_env("TIKTOK_POC_CHUNK_KB", DEFAULT_CHUNK_KB) * 1024
     print(
         f"Setup: proxy={proxy or 'direct'}, sessionid=yes, "
         f"msToken={'yes' if cookie.get('msToken') else 'no'}, device_id={device_id}, "
         f"count={count}, max_pages={max_pages}, delay={delay}s"
+    )
+    print(
+        f"Download: enabled={download_enabled}, url_mode={url_mode}, "
+        f"dir={download_dir}, concurrency={concurrency}, max_retry={max_retry}, "
+        f"chunk={chunk_size // 1024}KiB"
     )
     async with httpx.AsyncClient(
         timeout=30,
@@ -360,13 +523,24 @@ async def main() -> int:
                 count,
                 delay,
             )
+            metadata = [flatten_item(item) for item in items] if items else []
+            if download_enabled and metadata:
+                await download_phase(
+                    client,
+                    metadata,
+                    url_mode,
+                    download_dir,
+                    concurrency,
+                    max_retry,
+                    chunk_size,
+                    user_agent,
+                )
         except httpx.RequestError as error:
             print(f"NETWORK ERROR: {type(error).__name__}: {error}")
             return 2
 
     print("\n=== Verdict ===")
     if items:
-        metadata = [flatten_item(item) for item in items]
         print(f"Saved raw pages: {save_json('pages', payloads)}")
         print(f"Saved itemList: {save_json('items', items)}")
         print(f"Saved flattened metadata: {save_json('metadata', metadata)}")
