@@ -12,3 +12,6 @@ test*.py
 /tests/
 *.json
 *.html
+!/tests/
+!/tests/test_tiktok_download_item_bundles.py
+*.mp4

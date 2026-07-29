@@ -22,6 +22,7 @@ Media download is enabled by default and can be tuned with:
 - ``TIKTOK_POC_CONCURRENCY``: parallel downloads (default 5).
 - ``TIKTOK_POC_MAX_RETRY``: per-file retries (default 3).
 - ``TIKTOK_POC_CHUNK_KB``: streaming chunk size in KiB (default 1024).
+- ``TIKTOK_POC_VERIFY``: ``1`` audits saved metadata and downloads locally.
 
 TikTok CDN URLs are signed and expire within hours, so download soon after
 fetching. A 403 response means the link expired; re-fetch the metadata.
@@ -146,11 +147,12 @@ def nested_dict(item: dict, key: str) -> dict:
 
 def save_json(name: str, data: object) -> Path:
     path = Path(__file__).with_name(f"tiktok_recommend_{name}.json")
-    path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    write_json(path, data)
     return path
+
+
+def write_json(path: Path, data: object) -> None:
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def flatten_item(item: dict) -> dict:
@@ -228,15 +230,92 @@ def select_urls(item: dict, mode: str) -> list[tuple[str, str]]:
     return pairs
 
 
-def safe_name(item: dict, label: str | None) -> str:
-    """Build a filesystem-safe base name from author and id."""
-    author = str(item.get("author_id") or item.get("author_nickname") or "unknown")
-    item_id = str(item.get("id") or "unknown")
-    base = f"{author}_{item_id}"
-    if label:
-        base = f"{base}_{label}"
+def safe_name(value: object) -> str:
+    """Build a filesystem-safe directory name."""
+    base = str(value or "unknown")
     # Keep letters/digits and safe punctuation; replace the rest with "_".
     return "".join(c if (c.isalnum() or c in "._-") else "_" for c in base)
+
+
+def author_directory_name(item: dict) -> str:
+    return safe_name(item.get("author_id") or item.get("author_nickname"))
+
+
+def item_directory_name(item: dict) -> str:
+    return (
+        Path(author_directory_name(item)) / str(item.get("id") or "unknown")
+    ).as_posix()
+
+
+def verify_downloads(metadata: list[dict], mode: str, download_dir: Path) -> dict:
+    report = {
+        "matched": [],
+        "missing": [],
+        "invalid": [],
+        "orphan_directories": [],
+        "orphan_files": [],
+    }
+    expected_item_directories = {Path(item_directory_name(item)) for item in metadata}
+    expected_author_directories = {
+        directory.parent for directory in expected_item_directories
+    }
+
+    for item in metadata:
+        item_id = item.get("id")
+        directory_name = item_directory_name(item)
+        item_dir = download_dir / directory_name
+        metadata_path = item_dir / "metadata.json"
+        result = {"id": item_id, "item_directory": directory_name}
+        if not item_dir.is_dir():
+            report["missing"].append(result | {"reason": "missing_item_directory"})
+            continue
+        if not metadata_path.is_file():
+            report["missing"].append(result | {"reason": "missing_metadata"})
+            continue
+        try:
+            sidecar = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            report["invalid"].append(result | {"reason": "invalid_metadata"})
+            continue
+        if not isinstance(sidecar, dict) or sidecar.get("id") != item_id:
+            report["invalid"].append(result | {"reason": "metadata_id_mismatch"})
+            continue
+
+        expected_media = [
+            (label, item_dir / f"{label}.mp4") for label, _ in select_urls(item, mode)
+        ]
+        if empty_media := [
+            path.name
+            for _, path in expected_media
+            if path.is_file() and not path.stat().st_size
+        ]:
+            report["invalid"].append(
+                result | {"reason": f"empty_media:{','.join(empty_media)}"}
+            )
+            continue
+        if missing_media := [
+            path.name for _, path in expected_media if not path.is_file()
+        ]:
+            report["missing"].append(
+                result | {"reason": f"missing_media:{','.join(missing_media)}"}
+            )
+            continue
+        report["matched"].append(result)
+
+    if download_dir.is_dir():
+        for path in sorted(
+            download_dir.rglob("*"),
+            key=lambda entry: entry.relative_to(download_dir).as_posix(),
+        ):
+            relative_path = path.relative_to(download_dir)
+            if path.is_dir() and relative_path not in (
+                expected_author_directories | expected_item_directories
+            ):
+                report["orphan_directories"].append(relative_path.as_posix())
+            elif path.is_file() and relative_path.parent == Path("."):
+                report["orphan_files"].append(relative_path.name)
+
+    return report | {"counts": {key: len(value) for key, value in report.items()}}
 
 
 async def download_one(
@@ -292,48 +371,58 @@ async def download_phase(
     download_dir.mkdir(parents=True, exist_ok=True)
     headers = download_headers(user_agent)
     semaphore = asyncio.Semaphore(concurrency)
-    # In "all" mode every item downloads both variants with distinct labels;
-    # otherwise a single URL keeps the plain base name.
-    single = mode != "all"
 
-    async def worker(item: dict, label: str, url: str) -> bool:
-        name = safe_name(item, None if single else label)
-        dest = download_dir / f"{name}.mp4"
+    async def worker(url: str, dest: Path) -> bool:
         async with semaphore:
             return await download_one(client, url, dest, headers, max_retry, chunk_size)
 
-    tasks = [
-        worker(item, label, url)
-        for item in metadata
-        for label, url in select_urls(item, mode)
-    ]
-    if not tasks:
+    manifest = []
+    file_records = []
+    tasks = []
+    for item in metadata:
+        directory_name = item_directory_name(item)
+        item_dir = download_dir / directory_name
+        item_dir.mkdir(parents=True, exist_ok=True)
+        metadata_path = item_dir / "metadata.json"
+        write_json(metadata_path, item)
+        files = []
+        manifest.append(
+            {
+                "id": item.get("id"),
+                "author_id": item.get("author_id"),
+                "item_directory": directory_name,
+                "metadata_path": metadata_path.relative_to(download_dir).as_posix(),
+                "metadata": item,
+                "files": files,
+            }
+        )
+        for label, url in select_urls(item, mode):
+            dest = item_dir / f"{label}.mp4"
+            file_record = {
+                "url_label": label,
+                "media_path": dest.relative_to(download_dir).as_posix(),
+                "bytes": None,
+                "ok": False,
+            }
+            files.append(file_record)
+            file_records.append((file_record, dest))
+            tasks.append(worker(url, dest))
+
+    if tasks:
+        print(
+            f"\nDownload: {len(tasks)} file(s) -> {download_dir} "
+            f"(mode={mode}, concurrency={concurrency})"
+        )
+        results = await asyncio.gather(*tasks)
+    else:
         print("Download: no media URLs to download.")
-        return
-    print(
-        f"\nDownload: {len(tasks)} file(s) -> {download_dir} "
-        f"(mode={mode}, concurrency={concurrency})"
-    )
-    results = await asyncio.gather(*tasks)
+        results = []
+    for (file_record, dest), ok in zip(file_records, results):
+        file_record["ok"] = ok
+        if dest.is_file():
+            file_record["bytes"] = dest.stat().st_size
     ok = sum(1 for r in results if r)
     print(f"Download summary: {ok} succeeded, {len(results) - ok} failed.")
-    manifest = [
-        {
-            "id": item.get("id"),
-            "author_id": item.get("author_id"),
-            "file": f"{safe_name(item, None if single else label)}.mp4",
-            "url_label": label,
-            "ok": ok_flag,
-        }
-        for (item, label), ok_flag in zip(
-            (
-                (item, label)
-                for item in metadata
-                for label, _ in select_urls(item, mode)
-            ),
-            results,
-        )
-    ]
     print(f"Saved download manifest: {save_json('download_manifest', manifest)}")
 
 
@@ -469,6 +558,33 @@ def url_mode_from_env(name: str, default: str = "play_url") -> str:
 
 
 async def main() -> int:
+    url_mode = url_mode_from_env("TIKTOK_POC_URL_MODE")
+    download_dir = Path(os.getenv("TIKTOK_POC_DOWNLOAD_DIR", str(DEFAULT_DOWNLOAD_DIR)))
+    verify_only = os.getenv("TIKTOK_POC_VERIFY", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    if verify_only:
+        metadata_path = Path(__file__).with_name("tiktok_recommend_metadata.json")
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            print(f"FATAL: cannot read saved metadata: {error}")
+            return 2
+        if not isinstance(metadata, list) or not all(
+            isinstance(item, dict) for item in metadata
+        ):
+            print("FATAL: saved metadata must be a JSON list of objects")
+            return 2
+        report = verify_downloads(metadata, url_mode, download_dir)
+        print(f"Saved verification report: {save_json('verify_report', report)}")
+        print(
+            "Verification summary: "
+            + ", ".join(f"{key}={value}" for key, value in report["counts"].items())
+        )
+        return 0
+
     if not SETTINGS_PATH.is_file():
         print(f"FATAL: settings file not found: {SETTINGS_PATH}")
         return 2
@@ -490,8 +606,6 @@ async def main() -> int:
         "false",
         "no",
     )
-    url_mode = url_mode_from_env("TIKTOK_POC_URL_MODE")
-    download_dir = Path(os.getenv("TIKTOK_POC_DOWNLOAD_DIR", str(DEFAULT_DOWNLOAD_DIR)))
     concurrency = positive_int_from_env("TIKTOK_POC_CONCURRENCY", DEFAULT_CONCURRENCY)
     max_retry = positive_int_from_env("TIKTOK_POC_MAX_RETRY", DEFAULT_MAX_RETRY)
     chunk_size = positive_int_from_env("TIKTOK_POC_CHUNK_KB", DEFAULT_CHUNK_KB) * 1024
