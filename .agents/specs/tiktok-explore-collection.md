@@ -23,8 +23,8 @@ status: evidence-gated
 - In scope: Add fixture-based tests for confirmed request and response shapes.
 
 ## Non-Goals
-- Do not collect the For You recommendation feed. The current
-  `poc/explore/tiktok_explore_poc.py` calls `/api/recommend/item_list/` and is out of
+- Do not collect the For You recommendation feed. The separate
+  `poc/explore/tiktok_foryou_poc.py` calls `/api/recommend/item_list/` and is out of
   scope for this feature.
 - Do not reuse search-only fields such as `keyword` or `search_id` for an
   Explore request.
@@ -64,7 +64,7 @@ status: evidence-gated
 - `docs/tiktok-search-feasibility.md` records that the old Explore probe reused
   search parameters and returned JSON without `itemList`; it is not evidence
   that Explore collection is unavailable.
-- `poc/explore/tiktok_explore_poc.py` successfully processes the separate
+- `poc/explore/tiktok_foryou_poc.py` successfully processes the separate
   `/api/recommend/item_list/` recommendation feed and its media URLs.
 - The repository already has pure Python `XBogus` and `XGnarly` helpers.
 - A browser observation on 2026-07-29 confirmed that an anonymous `/explore`
@@ -83,7 +83,7 @@ status: evidence-gated
 - `poc/explore/tiktok_explore_collector.py` replays only HAR-captured request sequences.
   It discovers category IDs from those requests; no confirmed source for
   category names exists, so persisted category names are `null`.
-- `poc/explore/tiktok_explore_signed_poc.py` uses a captured parameter template and
+- `poc/explore/tiktok_explore_poc.py` uses a captured parameter template and
   fresh `X-Bogus`/`X-Gnarly` output. On 2026-07-31 it collected 119, 120, and
   123 without `X-Dynosaur`; each category returned two successful pages, and
   120 returned three. A returned `play_url` downloaded as a non-empty MP4.
@@ -274,7 +274,7 @@ status: evidence-gated
   access the system pytest temporary directory. Full Ruff still reports 122
   pre-existing diagnostics, and the full format check finds five pre-existing
   unformatted files.
-- Added `poc/explore/tiktok_explore_signed_poc.py` for direct signed Explore collection.
+- Added `poc/explore/tiktok_explore_poc.py` for direct signed Explore collection.
   It emits local metadata with current media URLs, supports immediate optional
   downloads, and stops static-cursor pagination only after an empty/repeated
   page. It does not print, commit, or place URLs in evidence artifacts.
