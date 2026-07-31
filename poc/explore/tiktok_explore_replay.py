@@ -1,4 +1,4 @@
-"""Opt-in pure HTTP replay for captured TikTok Explore requests."""
+"""对抓包到的 TikTok Explore 请求进行可选式纯 HTTP 重放。"""
 
 import argparse
 import asyncio
@@ -34,7 +34,7 @@ ALLOWED_HEADER_NAMES = {
 def build_replay_plan(
     requests: Sequence[Mapping[str, Any]],
 ) -> list[Mapping[str, Any]]:
-    """Keep one captured initial and next-page request for each category."""
+    """为每个分类保留一条抓包的初始请求和一条翻页请求。"""
     initial_categories = {
         request["category_type"]
         for request in requests
@@ -158,7 +158,7 @@ def headers_from_har(headers: Any) -> dict[str, str]:
 def captured_explore_requests(har: Mapping[str, Any]) -> list[dict[str, Any]]:
     log = har.get("log")
     if not isinstance(log, Mapping) or not isinstance(log.get("entries"), list):
-        raise ValueError("HAR must contain log.entries")
+        raise ValueError("HAR 必须包含 log.entries")
 
     requests: list[dict[str, Any]] = []
     for entry in log["entries"]:
@@ -194,11 +194,11 @@ def captured_explore_requests(har: Mapping[str, Any]) -> list[dict[str, Any]]:
 def load_session(settings_path: Path) -> tuple[dict[str, str], str]:
     settings = json.loads(settings_path.read_text(encoding="utf-8-sig"))
     if not isinstance(settings, Mapping):
-        raise ValueError("settings root must be an object")
+        raise ValueError("settings 根节点必须是对象")
     cookie = settings.get("cookie_tiktok")
     browser_info = settings.get("browser_info_tiktok")
     if not isinstance(cookie, Mapping) or not isinstance(browser_info, Mapping):
-        raise ValueError("TikTok session settings are missing")
+        raise ValueError("缺少 TikTok 会话配置")
     session = {str(name): str(value) for name, value in cookie.items()}
     user_agent = browser_info.get("User-Agent")
     if (
@@ -206,7 +206,7 @@ def load_session(settings_path: Path) -> tuple[dict[str, str], str]:
         or not isinstance(user_agent, str)
         or not user_agent
     ):
-        raise ValueError("TikTok sessionid or User-Agent is missing")
+        raise ValueError("缺少 TikTok sessionid 或 User-Agent")
     return session, user_agent
 
 
@@ -280,18 +280,16 @@ def save_report(report: Mapping[str, Any], report_path: Path) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Opt-in pure HTTP replay of locally captured TikTok Explore requests."
+        description="对本地抓包的 TikTok Explore 请求进行可选式纯 HTTP 重放。"
     )
-    parser.add_argument(
-        "--live", action="store_true", help="Send the captured requests."
-    )
+    parser.add_argument("--live", action="store_true", help="发送抓包请求。")
     parser.add_argument("--har", type=Path, default=DEFAULT_HAR_PATH)
     parser.add_argument("--settings", type=Path, default=DEFAULT_SETTINGS_PATH)
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT_PATH)
     parser.add_argument(
         "--proxy",
         default=os.getenv("TIKTOK_POC_PROXY", DEFAULT_PROXY),
-        help="HTTP proxy; pass an empty string for a direct connection.",
+        help="HTTP 代理；传入空字符串表示直连。",
     )
     return parser.parse_args()
 
@@ -299,23 +297,23 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     if not args.live:
-        print("Refusing network access without --live.")
+        print("未指定 --live，拒绝联网。")
         return 2
     try:
         har = json.loads(args.har.read_text(encoding="utf-8"))
         if not isinstance(har, Mapping):
-            raise ValueError("HAR root must be an object")
+            raise ValueError("HAR 根节点必须是对象")
         plan = build_replay_plan(captured_explore_requests(har))
         cookie, user_agent = load_session(args.settings)
     except (OSError, ValueError, json.JSONDecodeError):
-        print("ERROR: unable to load local replay inputs.")
+        print("错误: 无法加载本地重放输入。")
         return 2
 
     report = asyncio.run(replay_live(plan, cookie, user_agent, args.proxy or None))
     save_report(report, args.report)
     print(
-        f"Replay {'passed' if report['passed'] else 'failed'}: "
-        f"{len(report['results'])} request(s), {len(report['category_types'])} category(ies)."
+        f"重放{'通过' if report['passed'] else '失败'}: "
+        f"{len(report['results'])} 个请求，{len(report['category_types'])} 个分类。"
     )
     return 0 if report["passed"] else 1
 

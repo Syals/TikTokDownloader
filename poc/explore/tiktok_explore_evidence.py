@@ -1,4 +1,4 @@
-"""Sanitize browser-observed TikTok Explore requests for safe review."""
+"""将浏览器观测到的 TikTok Explore 请求脱敏，以便安全审阅。"""
 
 import argparse
 import json
@@ -118,11 +118,11 @@ def sanitize_request_evidence(
     request: Mapping[str, Any],
     response: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Return a commit-safe structural record of one browser request/response."""
+    """返回一条可安全提交的单次浏览器请求/响应结构化记录。"""
     url = str(request["url"])
     response_headers = response.get("headers", {})
     if not isinstance(response_headers, Mapping):
-        raise TypeError("response headers must be a mapping")
+        raise TypeError("响应头必须是映射类型")
     response_cookie_names = response.get("set_cookie_names")
     if not isinstance(response_cookie_names, list):
         response_cookie_names = set_cookie_names(response_headers)
@@ -186,10 +186,10 @@ def sanitize_har_entries(
     category_name: str | None,
     response_sample: Any | None = None,
 ) -> list[dict[str, Any]]:
-    """Extract commit-safe Explore request evidence from an in-memory HAR."""
+    """从内存中的 HAR 提取可安全提交的 Explore 请求证据。"""
     log = har.get("log")
     if not isinstance(log, Mapping) or not isinstance(log.get("entries"), list):
-        raise ValueError("HAR must contain log.entries")
+        raise ValueError("HAR 必须包含 log.entries")
 
     evidence: list[dict[str, Any]] = []
     for entry in log["entries"]:
@@ -238,12 +238,12 @@ def convert_har_file(
     category_name: str | None,
     response_sample_path: Path | None = None,
 ) -> int:
-    """Read a private HAR once and write only its sanitized Explore evidence."""
+    """读取一次私有 HAR，仅写入其中脱敏后的 Explore 证据。"""
     if input_path.resolve() == output_path.resolve():
-        raise ValueError("input and output paths must differ")
+        raise ValueError("输入路径与输出路径必须不同")
     har = json.loads(input_path.read_text(encoding="utf-8"))
     if not isinstance(har, Mapping):
-        raise ValueError("HAR root must be an object")
+        raise ValueError("HAR 根节点必须是对象")
     response_sample = None
     if response_sample_path is not None:
         response_sample = json.loads(response_sample_path.read_text(encoding="utf-8"))
@@ -262,20 +262,16 @@ def convert_har_file(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Convert a local HAR into sanitized TikTok Explore evidence."
+        description="将本地 HAR 转换为脱敏后的 TikTok Explore 证据。"
     )
-    parser.add_argument("input", type=Path, help="Private HAR export; never commit it.")
-    parser.add_argument(
-        "output", type=Path, help="Destination for sanitized evidence JSON."
-    )
-    parser.add_argument(
-        "--action", required=True, help="Browser action that produced the HAR."
-    )
-    parser.add_argument("--category-name", help="Visible category name, if applicable.")
+    parser.add_argument("input", type=Path, help="私有 HAR 导出；切勿提交。")
+    parser.add_argument("output", type=Path, help="脱敏证据 JSON 的输出路径。")
+    parser.add_argument("--action", required=True, help="产生该 HAR 的浏览器操作。")
+    parser.add_argument("--category-name", help="可见的分类名称（如适用）。")
     parser.add_argument(
         "--response-sample",
         type=Path,
-        help="Private JSON response sample; never commit it.",
+        help="私有 JSON 响应样本；切勿提交。",
     )
     return parser.parse_args()
 
@@ -291,9 +287,9 @@ def main() -> int:
             response_sample_path=args.response_sample,
         )
     except (OSError, ValueError, json.JSONDecodeError):
-        print("ERROR: HAR conversion failed without writing evidence.")
+        print("错误: HAR 转换失败，未写出证据。")
         return 2
-    print(f"Wrote {count} sanitized Explore record(s) to {args.output}.")
+    print(f"已向 {args.output} 写入 {count} 条脱敏 Explore 记录。")
     return 0
 
 

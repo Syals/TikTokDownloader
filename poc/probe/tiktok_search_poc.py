@@ -1,12 +1,12 @@
-"""PoC: verify whether TikTok search/discover endpoints are reachable
-through the project's existing signing infrastructure (XBogus + XGnarly).
+"""PoC：验证 TikTok 搜索/发现端点是否可通过项目既有的签名基础设施
+（XBogus + XGnarly）访问。
 
-Bypasses the APITikTok base class intentionally to keep full control over
-error handling and raw response inspection. Signing is applied in exactly
-the same order as src/interface/template.py:APITikTok.deal_url_params.
+故意绕过 APITikTok 基类，以便完全掌控错误处理与原始响应检视。
+签名的应用顺序与 src/interface/template.py:APITikTok.deal_url_params
+完全一致。
 
-Usage (from repo root):
-    uv run python poc/tiktok_search_poc.py
+用法（在仓库根目录执行）：
+    uv run python poc/probe/tiktok_search_poc.py
 """
 
 import asyncio
@@ -18,14 +18,14 @@ from urllib.parse import quote, urlencode
 
 import httpx
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.custom import DATA_HEADERS_TIKTOK  # noqa: E402
 from src.encrypt import XBogus, XGnarly  # noqa: E402
 
 SETTINGS_PATH = PROJECT_ROOT / "Volume" / "settings.json"
-POC_DIR = Path(__file__).resolve().parent
+OUTPUT_DIR = PROJECT_ROOT / ".output" / "explore" / "samples"
 
 
 def cookie_dict_to_str(cookie: dict) -> str:
@@ -33,7 +33,7 @@ def cookie_dict_to_str(cookie: dict) -> str:
 
 
 def build_tiktok_params(ms_token: str, device_id: str, search: dict) -> dict:
-    """Mirror APITikTok.params (src/interface/template.py:503) + search overrides."""
+    """镜像 APITikTok.params（src/interface/template.py:503）+ 搜索覆盖项。"""
     base = {
         "aid": "1988",
         "app_language": "es",
@@ -72,7 +72,7 @@ def build_tiktok_params(ms_token: str, device_id: str, search: dict) -> dict:
 
 
 def sign_query(params: dict, user_agent: str) -> str:
-    """Apply TikTok signing in the same order as APITikTok.deal_url_params."""
+    """按 APITikTok.deal_url_params 的顺序应用 TikTok 签名。"""
     query = urlencode(params, safe="=", quote_via=quote)
     xb = XBogus().get_x_bogus(query, None, "GET", user_agent=user_agent)
     xg = XGnarly().generate(query, "", "GET", user_agent=user_agent)
@@ -95,33 +95,33 @@ async def probe(
         query = sign_query(params, user_agent)
         full_url = f"{url}?{query}"
         resp = await client.get(full_url, headers=headers)
-        print(f"      Status:        {resp.status_code}")
+        print(f"      状态码:        {resp.status_code}")
         print(f"      Content-Type:  {resp.headers.get('content-type', '?')}")
-        print(f"      Content-Length: {len(resp.content)} bytes")
+        print(f"      Content-Length: {len(resp.content)} 字节")
 
         if resp.status_code != 200:
             preview = resp.text[:400].replace("\n", " ")
-            print(f"      [NON-200] Body preview: {preview}")
+            print(f"      [非 200] 响应预览: {preview}")
             return None
 
         try:
             data = resp.json()
         except json.JSONDecodeError:
             preview = resp.text[:400].replace("\n", " ")
-            print(f"      [NOT JSON] Body preview: {preview}")
+            print(f"      [非 JSON] 响应预览: {preview}")
             return None
 
         if not isinstance(data, dict):
-            print(f"      Response root type: {type(data).__name__}")
+            print(f"      响应根类型: {type(data).__name__}")
             return data
 
-        print(f"      Top-level keys: {list(data.keys())}")
-        sample = POC_DIR / f"sample_{name.replace('/', '_')}.json"
+        print(f"      顶层键: {list(data.keys())}")
+        sample = OUTPUT_DIR / f"sample_{name.replace('/', '_')}.json"
         sample.write_text(
             json.dumps(data, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        print(f"      Raw response saved: {sample.name}")
+        print(f"      原始响应已保存: {sample.name}")
 
         for key in (
             "data",
@@ -134,10 +134,10 @@ async def probe(
         ):
             items = data.get(key)
             if isinstance(items, list) and items:
-                print(f"      ITEMS container '{key}': {len(items)} items")
+                print(f"      条目容器 '{key}': {len(items)} 个条目")
                 first = items[0]
                 if isinstance(first, dict):
-                    print(f"        First item keys: {list(first.keys())[:25]}")
+                    print(f"        首条目键: {list(first.keys())[:25]}")
                     for stat in ("digg_count", "play_count", "share_count"):
                         v = (
                             first.get("stats", {}).get(stat)
@@ -147,36 +147,37 @@ async def probe(
                         if v is not None:
                             print(f"        stats.{stat} = {v}")
                 return data
-        print(f"      No known items container found")
+        print("      未找到已知的条目容器")
         for k, v in data.items():
             if isinstance(v, dict):
-                print(f"        data['{k}'] keys: {list(v.keys())[:10]}")
+                print(f"        data['{k}'] 键: {list(v.keys())[:10]}")
         return data
     except httpx.RequestError as e:
-        print(f"      [NETWORK ERROR] {type(e).__name__}: {e}")
+        print(f"      [网络错误] {type(e).__name__}: {e}")
         return None
     except Exception as e:
-        print(f"      [ERROR] {type(e).__name__}: {e}")
+        print(f"      [错误] {type(e).__name__}: {e}")
         traceback.print_exc()
         return None
 
 
 async def main() -> int:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     if not SETTINGS_PATH.exists():
-        print(f"[FATAL] settings.json not found at {SETTINGS_PATH}")
+        print(f"[致命] 未在 {SETTINGS_PATH} 找到 settings.json")
         return 2
     settings = json.loads(SETTINGS_PATH.read_text(encoding="utf-8-sig"))
     cookie_dict = settings.get("cookie_tiktok")
     if not isinstance(cookie_dict, dict) or "sessionid" not in cookie_dict:
-        print("[FATAL] cookie_tiktok missing or not logged in (no 'sessionid')")
+        print("[致命] cookie_tiktok 缺失或未登录（无 'sessionid'）")
         return 2
     cookie_str = cookie_dict_to_str(cookie_dict)
     ms_token = cookie_dict.get("msToken", "")
     device_id = settings.get("browser_info_tiktok", {}).get("device_id", "")
     user_agent = settings["browser_info_tiktok"]["User-Agent"]
     print(
-        f"[SETUP] sessionid: yes | msToken: {'yes' if ms_token else 'NO'} "
-        f"| device_id: {device_id or 'EMPTY'} | UA length: {len(user_agent)}"
+        f"[初始化] sessionid: yes | msToken: {'yes' if ms_token else 'NO'} "
+        f"| device_id: {device_id or 'EMPTY'} | UA 长度: {len(user_agent)}"
     )
 
     headers = DATA_HEADERS_TIKTOK | {
@@ -206,17 +207,30 @@ async def main() -> int:
         for name, url in endpoints:
             params = build_tiktok_params(ms_token, device_id, base_search)
             data = await probe(client, name, url, params, headers, user_agent)
-            has_items = bool(data and isinstance(data, dict) and any(
-                isinstance(data.get(k), list) and data[k]
-                for k in ("data", "item_list", "aweme_list", "itemList",
-                          "explore_item_list", "list", "card_list")
-            ))
+            has_items = bool(
+                data
+                and isinstance(data, dict)
+                and any(
+                    isinstance(data.get(k), list) and data[k]
+                    for k in (
+                        "data",
+                        "item_list",
+                        "aweme_list",
+                        "itemList",
+                        "explore_item_list",
+                        "list",
+                        "card_list",
+                    )
+                )
+            )
             verdicts[name] = has_items
 
-    print(f"\n{'=' * 72}\n[SUMMARY]\n{'=' * 72}")
+    print(f"\n{'=' * 72}\n[汇总]\n{'=' * 72}")
     for name, ok in verdicts.items():
-        print(f"  {name:30s} : {'PASS' if ok else 'FAIL'}")
-    print(f"\nVerdict: {'AT LEAST ONE ENDPOINT WORKS' if any(verdicts.values()) else 'ALL ENDPOINTS FAILED'}")
+        print(f"  {name:30s} : {'通过' if ok else '失败'}")
+    print(
+        f"\n结论: {'至少一个端点可用' if any(verdicts.values()) else '所有端点均失败'}"
+    )
     return 0 if any(verdicts.values()) else 1
 
 

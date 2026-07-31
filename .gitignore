@@ -15,3 +15,4 @@ test*.py
 /tests/
 /tests/*
 *.mp4
+test*.py

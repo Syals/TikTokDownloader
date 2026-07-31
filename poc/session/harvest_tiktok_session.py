@@ -1,54 +1,51 @@
-"""Harvest a TikTok web session from a headless Chromium for the Spain region.
+"""使用无头 Chromium 采集面向西班牙地区的 TikTok Web 会话。
 
-Why this exists
----------------
-Signing X-Bogus / X-Gnarly in pure Python (httpx) currently yields
-``{"status_msg": "url doesn't match"}`` because TikTok validates that the
-request fingerprint matches the browser environment that produced the
-signature. A consistent identity must come from a single, real browser
-context. This script builds that context and records everything the rest of
-the project needs.
+为什么需要它
+------------
+用纯 Python（httpx）对 X-Bogus / X-Gnarly 签名目前会得到
+``{"status_msg": "url doesn't match"}``，因为 TikTok 会校验请求指纹是否
+与生成签名的浏览器环境一致。一致的设备身份必须来自同一个真实的浏览器
+上下文。本脚本负责构建该上下文，并记录项目其余部分所需的全部信息。
 
-Best-practice flow (implemented below)
-  1. Launch Chromium with a PERSISTENT profile so cookies / device state
-     survive across runs (Volume/browser_profile_tiktok).
-  2. Route all traffic through the Spain proxy (Clash / mihomo node).
-  3. Force Spanish locale (es-ES) and Europe/Madrid timezone in the context.
-  4. Verify the egress IP actually resolves to Spain before touching TikTok.
-  5. Visit /explore so TikTok bootstraps the session and emits device_id
-     (wid), msToken and the full cookie jar.
-  6. Read, from that one browser context:
-       - device_id        <- "wid" embedded in the page payload
+最佳实践流程（实现如下）
+  1. 以持久化配置启动 Chromium，使 cookie / 设备状态在多次运行间保留
+     （Volume/browser_profile_tiktok）。
+  2. 所有流量经由西班牙代理（Clash / mihomo 节点）。
+  3. 在上下文中强制西班牙语区域（es-ES）与 Europe/Madrid 时区。
+  4. 在访问 TikTok 之前先确认出口 IP 确实解析到西班牙。
+  5. 访问 /explore，让 TikTok 引导会话并下发 device_id
+     （wid）、msToken 和完整 cookie。
+  6. 从同一个浏览器上下文读取：
+       - device_id        <- 页面负载中嵌入的 "wid"
        - cookies          <- context.cookies()  (msToken, sessionid, ...)
        - User-Agent       <- navigator.userAgent
        - platform / os    <- navigator.platform
        - browser language <- navigator.language
        - screen size      <- window.screen
-  7. Merge the harvested identity into Volume/settings.json:
+  7. 将采集到的身份合并进 Volume/settings.json：
        - cookie_tiktok        <- cookies (name -> value)
        - browser_info_tiktok  <- UA / platform / os / screen / device_id
-     Spain-specific params (app_language=es, region=ES, tz_name=Europe/Madrid,
-     ...) are preserved and never overwritten here.
-  8. Sign and send requests using THIS SAME identity: the signature must be
-     computed with the same UA + params the browser used.
+     西班牙专属参数（app_language=es、region=ES、tz_name=Europe/Madrid、
+     ……）会被保留，且在此处绝不被覆盖。
+  8. 使用同一身份签名并发送请求：签名必须用浏览器所用的同一 UA + 参数计算。
 
-First-time login: run once with ``--login`` (headed) to complete TikTok login
-inside the persistent profile, then re-run normally (headless) to harvest.
+首次登录：先带 ``--login``（有头）运行一次，在持久化配置内完成 TikTok
+登录，随后正常（无头）重新运行以采集。
 
-Usage
------
-    # one-time dependency (Playwright is NOT in pyproject.toml)
+用法
+----
+    # 一次性依赖（Playwright 不在 pyproject.toml 中）
     uv pip install playwright
     uv run playwright install chromium
 
-    # normal harvest (headless), Spain proxy
-    uv run python harvest_tiktok_session.py --proxy http://127.0.0.1:7890
+    # 正常采集（无头），西班牙代理
+    uv run python poc/session/harvest_tiktok_session.py --proxy http://127.0.0.1:7890
 
-    # first-time login (headed, manual login in the window)
-    uv run python harvest_tiktok_session.py --login --proxy http://127.0.0.1:7890
+    # 首次登录（有头，在窗口中手动登录）
+    uv run python poc/session/harvest_tiktok_session.py --login --proxy http://127.0.0.1:7890
 
-    # debug headed run without login prompt
-    uv run python harvest_tiktok_session.py --headed --proxy http://127.0.0.1:7890
+    # 调试性有头运行，不触发登录提示
+    uv run python poc/session/harvest_tiktok_session.py --headed --proxy http://127.0.0.1:7890
 """
 
 from __future__ import annotations
@@ -59,7 +56,7 @@ import json
 import re
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 SETTINGS_PATH = PROJECT_ROOT / "Volume" / "settings.json"
 PROFILE_DIR = PROJECT_ROOT / "Volume" / "browser_profile_tiktok"
 
@@ -69,9 +66,8 @@ IP_CHECK_URL = "https://ipinfo.io/json"
 WID_PATTERN = re.compile(r'"wid":"(\d{15,20})"')
 CHROME_VERSION_PATTERN = re.compile(r"Chrome/([\d.]+)")
 
-# These Spain-specific fields are authoritative and must NOT be overwritten by
-# anything harvested from the browser runtime. Only UA / platform / os /
-# screen / device_id / browser_language are refreshed from the browser.
+# 这些西班牙专属字段是权威的，绝不能被浏览器运行时采集到的任何内容覆盖。
+# 只有 UA / platform / os / screen / device_id / browser_language 会从浏览器刷新。
 SPAIN_LOCKED_PARAMS = {
     "app_language": "es",
     "language": "es",
@@ -84,7 +80,7 @@ SPAIN_LOCKED_PARAMS = {
 
 def load_settings() -> dict:
     if not SETTINGS_PATH.exists():
-        print(f"[FATAL] settings.json not found at {SETTINGS_PATH}")
+        print(f"[致命] 未在 {SETTINGS_PATH} 找到 settings.json")
         raise SystemExit(2)
     return json.loads(SETTINGS_PATH.read_text(encoding="utf-8-sig"))
 
@@ -108,33 +104,33 @@ def derive_os(platform: str) -> str:
 
 
 async def check_egress_country(page, expected: str = "ES") -> bool:
-    print(f"[GEO] Checking egress country via {IP_CHECK_URL} ...")
+    print(f"[地理] 正在通过 {IP_CHECK_URL} 检查出口国家/地区 ...")
     try:
         await page.goto(IP_CHECK_URL, wait_until="domcontentloaded", timeout=20000)
         raw = await page.evaluate("() => document.body.innerText")
         info = json.loads(raw)
     except Exception as e:  # noqa: BLE001
-        print(f"[GEO] FAILED to inspect egress IP: {type(e).__name__}: {e}")
+        print(f"[地理] 检查出口 IP 失败: {type(e).__name__}: {e}")
         return False
     country = str(info.get("country", "")).upper()
     ip = info.get("ip", "?")
     region = info.get("region", "?")
-    print(f"[GEO] Egress IP={ip} region={region} country={country or '?'}")
+    print(f"[地理] 出口 IP={ip} region={region} country={country or '?'}")
     if country != expected:
         print(
-            f"[GEO] WARNING: egress country is {country or '?'}, expected {expected}. "
-            "The proxy is NOT routing through Spain; TikTok content will not be "
-            "Spanish. Fix the proxy before harvesting."
+            f"[地理] 警告: 出口国家/地区为 {country or '?'}，期望为 {expected}。"
+            "代理并未经西班牙出口；TikTok 内容将不是西班牙语。"
+            "请先修复代理再采集。"
         )
         return False
-    print("[GEO] OK: Spain egress confirmed.")
+    print("[地理] 正常：已确认西班牙出口。")
     return True
 
 
 async def harvest(context, page) -> dict:
-    print(f"[HARVEST] Loading {EXPLORE_URL} ...")
+    print(f"[采集] 正在加载 {EXPLORE_URL} ...")
     await page.goto(EXPLORE_URL, wait_until="domcontentloaded", timeout=60000)
-    # Let TikTok bootstrap the session (cookies, wid, msToken).
+    # 让 TikTok 引导会话（cookies、wid、msToken）。
     try:
         await page.wait_for_load_state("networkidle", timeout=20000)
     except Exception:  # noqa: BLE001
@@ -157,7 +153,7 @@ async def harvest(context, page) -> dict:
     if m := WID_PATTERN.search(html):
         wid = m.group(1)
     if not wid:
-        # Fallback: some builds surface the web device id in localStorage.
+        # 兜底：部分版本会把 web device id 放在 localStorage。
         try:
             local = await page.evaluate(
                 """() => {
@@ -216,7 +212,7 @@ def merge_into_settings(settings: dict, data: dict) -> dict:
             "device_id": data["device_id"],
         }
     )
-    # Re-assert the locked Spain params so nothing stale survives.
+    # 重新声明锁定的西班牙参数，确保没有陈旧值残留。
     browser_info.update(SPAIN_LOCKED_PARAMS)
     settings["browser_info_tiktok"] = browser_info
     return settings
@@ -224,50 +220,50 @@ def merge_into_settings(settings: dict, data: dict) -> dict:
 
 def report(data: dict) -> None:
     print("\n" + "=" * 60)
-    print("[HARVEST RESULT]")
+    print("[采集结果]")
     print("=" * 60)
-    print(f"  device_id        : {data['device_id'] or '(not found)'}")
+    print(f"  device_id        : {data['device_id'] or '(未找到)'}")
     print(f"  User-Agent       : {data['User-Agent']}")
     print(f"  platform / os    : {data['browser_platform']} / {data['os']}")
     print(f"  browser_language : {data['browser_language']}")
     print(f"  screen           : {data['screen_width']}x{data['screen_height']}")
-    print(f"  cookie count     : {len(data['cookie'])}")
+    print(f"  cookie 数量      : {len(data['cookie'])}")
     has_session = "sessionid" in data["cookie"]
     has_mstoken = "msToken" in data["cookie"]
     print(f"  sessionid        : {'yes' if has_session else 'NO'}")
     print(f"  msToken          : {'yes' if has_mstoken else 'NO'}")
     if not data["device_id"]:
-        print("  NOTE: device_id (wid) not found; the page may have been blocked.")
+        print("  注意: 未找到 device_id (wid)；页面可能被拦截。")
     if not has_session:
         print(
-            "  NOTE: no sessionid -> not logged in. Run once with --login to "
-            "log in inside the persistent profile, then re-run."
+            "  注意: 没有 sessionid -> 未登录。请先带 --login 运行一次，"
+            "在持久化配置内登录后再重新运行。"
         )
 
 
 async def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Harvest a TikTok web session (Spain) from headless Chromium.",
+        description="使用无头 Chromium 采集（西班牙）TikTok Web 会话。",
     )
     parser.add_argument(
         "--proxy",
         default=None,
-        help="Spain proxy URL, e.g. http://127.0.0.1:7890 (Clash/mihomo).",
+        help="西班牙代理 URL，例如 http://127.0.0.1:7890（Clash/mihomo）。",
     )
     parser.add_argument(
         "--login",
         action="store_true",
-        help="Run headed and pause for manual TikTok login, then exit.",
+        help="有头运行并暂停以供手动登录 TikTok，随后退出。",
     )
     parser.add_argument(
         "--headed",
         action="store_true",
-        help="Run headed (visible) without the login pause.",
+        help="有头（可见）运行，但不触发登录暂停。",
     )
     parser.add_argument(
         "--skip-geo",
         action="store_true",
-        help="Skip the Spain egress IP check.",
+        help="跳过西班牙出口 IP 检查。",
     )
     args = parser.parse_args()
 
@@ -275,7 +271,7 @@ async def main() -> int:
         from playwright.async_api import async_playwright
     except ImportError:
         print(
-            "[FATAL] Playwright is not installed. Run:\n"
+            "[致命] 未安装 Playwright。请运行：\n"
             "  uv pip install playwright\n"
             "  uv run playwright install chromium"
         )
@@ -292,14 +288,14 @@ async def main() -> int:
     }
     if args.proxy:
         launch_kwargs["proxy"] = {"server": args.proxy}
-        print(f"[SETUP] proxy = {args.proxy}")
+        print(f"[初始化] proxy = {args.proxy}")
     else:
         print(
-            "[SETUP] WARNING: no --proxy given. If the host is not already "
-            "routed through Spain, TikTok content will not be Spanish."
+            "[初始化] 警告: 未提供 --proxy。若主机当前未经由西班牙出口，"
+            "TikTok 内容将不是西班牙语。"
         )
-    print(f"[SETUP] profile = {PROFILE_DIR}")
-    print(f"[SETUP] headless = {headless}")
+    print(f"[初始化] profile = {PROFILE_DIR}")
+    print(f"[初始化] headless = {headless}")
 
     async with async_playwright() as p:
         context = await p.chromium.launch_persistent_context(
@@ -311,16 +307,16 @@ async def main() -> int:
             if not args.skip_geo:
                 ok = await check_egress_country(page, "ES")
                 if not ok and not args.login:
-                    print("[ABORT] Egress is not Spain; fix the proxy and retry.")
-                    print("        (use --skip-geo to bypass, not recommended)")
+                    print("[中止] 出口非西班牙；请修复代理后重试。")
+                    print("        （可用 --skip-geo 绕过，不推荐）")
                     return 1
 
             if args.login:
-                print("[LOGIN] Opening TikTok for manual login ...")
+                print("[登录] 正在打开 TikTok 以供手动登录 ...")
                 await page.goto(EXPLORE_URL, wait_until="domcontentloaded")
                 print(
-                    "[LOGIN] Complete login in the browser window, then press "
-                    "Enter here to save the session and exit."
+                    "[登录] 请在浏览器窗口中完成登录，然后回到这里按"
+                    "回车保存会话并退出。"
                 )
                 loop = asyncio.get_event_loop()
                 await loop.run_in_executor(None, input)
@@ -330,15 +326,15 @@ async def main() -> int:
             data = await harvest(context, page)
             report(data)
             if not data["device_id"] and "sessionid" not in data["cookie"]:
-                print("\n[ABORT] Nothing useful harvested (blocked / not logged in).")
+                print("\n[中止] 未采集到有用信息（被拦截 / 未登录）。")
                 return 1
 
             settings = load_settings()
             settings = merge_into_settings(settings, data)
             save_settings(settings)
-            print(f"\n[OK] Merged into {SETTINGS_PATH}")
+            print(f"\n[完成] 已合并进 {SETTINGS_PATH}")
             print(
-                "     Spain params preserved: "
+                "     已保留的西班牙参数: "
                 + ", ".join(f"{k}={v}" for k, v in SPAIN_LOCKED_PARAMS.items())
             )
             return 0

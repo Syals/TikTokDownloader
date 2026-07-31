@@ -1,4 +1,4 @@
-"""Opt-in collector for the captured TikTok Explore request sequences."""
+"""对抓包到的 TikTok Explore 请求序列进行可选式采集。"""
 
 import argparse
 import asyncio
@@ -33,13 +33,13 @@ else:
     )
 
 
-DEFAULT_OUTPUT_PATH = Path(".output/tiktok_explore_collection.json")
+DEFAULT_OUTPUT_PATH = Path(".output/explore/collection.json")
 
 
 def build_collection_plan(
     requests: Sequence[Mapping[str, Any]], max_pages_per_category: int
 ) -> list[Mapping[str, Any]]:
-    """Keep captured requests without inventing category pagination fields."""
+    """保留抓包请求，不臆造分类分页字段。"""
     selected_counts: dict[str, int] = {}
     plan: list[Mapping[str, Any]] = []
     for request in requests:
@@ -60,7 +60,7 @@ def hash_identifier(value: str) -> str:
 def normalize_collection(
     pages: Sequence[tuple[str, Mapping[str, Any]]],
 ) -> dict[str, list[dict[str, Any]]]:
-    """Return commit-safe category metadata and a deduplicated download checklist."""
+    """返回可安全提交的分类元数据以及去重后的下载清单。"""
     categories: dict[str, dict[str, Any]] = {}
     items: dict[str, dict[str, Any]] = {}
     category_item_ids: dict[str, set[str]] = {}
@@ -124,7 +124,7 @@ async def collect_live(
     user_agent: str,
     proxy: str | None,
 ) -> dict[str, Any]:
-    """Replay the captured requests and keep live response payloads in memory only."""
+    """重放抓包请求，实时响应负载仅在内存中保留。"""
     summaries: list[dict[str, Any]] = []
     pages: list[tuple[str, Mapping[str, Any]]] = []
     async with httpx.AsyncClient(
@@ -179,9 +179,9 @@ def positive_int(value: str) -> int:
     try:
         parsed = int(value)
     except ValueError as error:
-        raise argparse.ArgumentTypeError("must be a positive integer") from error
+        raise argparse.ArgumentTypeError("必须为正整数") from error
     if parsed < 1:
-        raise argparse.ArgumentTypeError("must be a positive integer")
+        raise argparse.ArgumentTypeError("必须为正整数")
     return parsed
 
 
@@ -194,9 +194,9 @@ def save_collection(collection: Mapping[str, Any], output_path: Path) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Opt-in collection using captured TikTok Explore request sequences."
+        description="使用抓包的 TikTok Explore 请求序列进行可选式采集。"
     )
-    parser.add_argument("--live", action="store_true", help="Send captured requests.")
+    parser.add_argument("--live", action="store_true", help="发送抓包请求。")
     parser.add_argument("--har", type=Path, default=DEFAULT_HAR_PATH)
     parser.add_argument("--settings", type=Path, default=DEFAULT_SETTINGS_PATH)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_PATH)
@@ -204,12 +204,12 @@ def parse_args() -> argparse.Namespace:
         "--max-pages-per-category",
         type=positive_int,
         default=2,
-        help="Maximum captured requests to replay for each discovered category.",
+        help="每个发现的分类最多重放的抓包请求数。",
     )
     parser.add_argument(
         "--proxy",
         default=os.getenv("TIKTOK_POC_PROXY", DEFAULT_PROXY),
-        help="HTTP proxy; pass an empty string for a direct connection.",
+        help="HTTP 代理；传入空字符串表示直连。",
     )
     return parser.parse_args()
 
@@ -217,25 +217,25 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     if not args.live:
-        print("Refusing network access without --live.")
+        print("未指定 --live，拒绝联网。")
         return 2
     try:
         har = json.loads(args.har.read_text(encoding="utf-8"))
         if not isinstance(har, Mapping):
-            raise ValueError("HAR root must be an object")
+            raise ValueError("HAR 根节点必须是对象")
         plan = build_collection_plan(
             captured_explore_requests(har), args.max_pages_per_category
         )
         cookie, user_agent = load_session(args.settings)
     except (OSError, ValueError, json.JSONDecodeError):
-        print("ERROR: unable to load local collector inputs.")
+        print("错误: 无法加载本地采集输入。")
         return 2
 
     collection = asyncio.run(collect_live(plan, cookie, user_agent, args.proxy or None))
     save_collection(collection, args.output)
     print(
-        f"Collection {'completed' if collection['collected'] else 'failed'}: "
-        f"{len(collection['items'])} item(s), {len(collection['categories'])} category(ies)."
+        f"采集{'完成' if collection['collected'] else '失败'}: "
+        f"{len(collection['items'])} 个条目，{len(collection['categories'])} 个分类。"
     )
     return 0 if collection["collected"] else 1
 

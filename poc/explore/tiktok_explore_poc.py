@@ -1,31 +1,30 @@
-"""Collect paginated TikTok For You recommendations and download their media.
+"""采集分页的 TikTok For You 推荐内容并下载其媒体。
 
-The script verifies that TikTok's recommendation endpoint returns an
-``itemList`` containing metadata and playable media URLs. It saves raw page
-responses, all collected items, and flattened metadata locally, then
-(optionally) batch-downloads the selected media URLs.
+本脚本验证 TikTok 的推荐端点会返回包含元数据和可播放媒体 URL 的
+``itemList``。它会本地保存原始分页响应、所有采集到的条目以及扁平化
+后的元数据，随后（可选）批量下载所选的媒体 URL。
 
-Run from the repository root:
-    uv run python poc/tiktok_explore_poc.py
+在仓库根目录运行：
+    uv run python poc/explore/tiktok_explore_poc.py
 
-Set ``TIKTOK_POC_PROXY`` to override the local proxy. Set it to an empty
-string to test a direct connection. ``TIKTOK_POC_COUNT``,
-``TIKTOK_POC_MAX_PAGES``, and ``TIKTOK_POC_DELAY`` override the defaults of
-20 items, 5 pages, and 1.5 seconds between pages.
+设置 ``TIKTOK_POC_PROXY`` 可覆盖本地代理；将其设为空字符串则以直连
+方式测试。``TIKTOK_POC_COUNT``、``TIKTOK_POC_MAX_PAGES`` 和
+``TIKTOK_POC_DELAY`` 分别覆盖默认的 20 条、5 页以及页间 1.5 秒的设定。
 
-Media download is enabled by default and can be tuned with:
+媒体下载默认开启，可通过以下变量调节：
 
-- ``TIKTOK_POC_DOWNLOAD``: ``0`` disables the download phase (fetch only).
-- ``TIKTOK_POC_URL_MODE``: ``play_url`` (default), ``download_url``, or
-  ``all`` selects which media URL field(s) to download.
-- ``TIKTOK_POC_DOWNLOAD_DIR``: output directory (default ``poc/downloads``).
-- ``TIKTOK_POC_CONCURRENCY``: parallel downloads (default 5).
-- ``TIKTOK_POC_MAX_RETRY``: per-file retries (default 3).
-- ``TIKTOK_POC_CHUNK_KB``: streaming chunk size in KiB (default 1024).
-- ``TIKTOK_POC_VERIFY``: ``1`` audits saved metadata and downloads locally.
+- ``TIKTOK_POC_DOWNLOAD``：设为 ``0`` 关闭下载阶段（仅抓取）。
+- ``TIKTOK_POC_URL_MODE``：``play_url``（默认）、``download_url`` 或
+  ``all``，选择要下载的媒体 URL 字段。
+- ``TIKTOK_POC_DOWNLOAD_DIR``：输出目录（默认
+  ``.output/explore/downloads``）。
+- ``TIKTOK_POC_CONCURRENCY``：并行下载数（默认 5）。
+- ``TIKTOK_POC_MAX_RETRY``：单文件重试次数（默认 3）。
+- ``TIKTOK_POC_CHUNK_KB``：流式分块大小，单位 KiB（默认 1024）。
+- ``TIKTOK_POC_VERIFY``：设为 ``1`` 对本地已保存的元数据和下载内容做审计。
 
-TikTok CDN URLs are signed and expire within hours, so download soon after
-fetching. A 403 response means the link expired; re-fetch the metadata.
+TikTok 的 CDN URL 带有签名并在数小时内失效，因此抓取后应尽快下载。
+返回 403 表示链接已过期；请重新获取元数据。
 """
 
 import asyncio
@@ -38,7 +37,7 @@ from urllib.parse import quote, urlencode, urlparse
 
 import httpx
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.custom import DATA_HEADERS_TIKTOK, DOWNLOAD_HEADERS_TIKTOK  # noqa: E402
@@ -54,7 +53,8 @@ ITEM_KEYS = ("itemList", "item_list", "items", "aweme_list")
 RECOMMEND_ENDPOINT = "https://www.tiktok.com/api/recommend/item_list/"
 RECOMMEND_FROM_PAGE = "foryou"
 
-DEFAULT_DOWNLOAD_DIR = Path(__file__).with_name("downloads")
+DEFAULT_OUTPUT_DIR = PROJECT_ROOT / ".output" / "explore" / "samples"
+DEFAULT_DOWNLOAD_DIR = PROJECT_ROOT / ".output" / "explore" / "downloads"
 DEFAULT_CONCURRENCY = 5
 DEFAULT_MAX_RETRY = 3
 DEFAULT_CHUNK_KB = 1024
@@ -146,12 +146,13 @@ def nested_dict(item: dict, key: str) -> dict:
 
 
 def save_json(name: str, data: object) -> Path:
-    path = Path(__file__).with_name(f"tiktok_recommend_{name}.json")
+    path = DEFAULT_OUTPUT_DIR / f"tiktok_recommend_{name}.json"
     write_json(path, data)
     return path
 
 
 def write_json(path: Path, data: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -195,17 +196,17 @@ def print_item_summary(item: dict) -> None:
     play_url = first_url(video.get("playAddr") or video.get("play_addr"))
     download_url = first_url(video.get("downloadAddr") or video.get("download_addr"))
     media_url = play_url or download_url
-    print(f"  Sample ID: {item.get('id', '-')}")
-    print(f"  Author: {author.get('uniqueId', author.get('nickname', '-'))}")
+    print(f"  样本 ID: {item.get('id', '-')}")
+    print(f"  作者: {author.get('uniqueId', author.get('nickname', '-'))}")
     print(
-        "  Stats: "
-        f"plays={stats.get('playCount', stats.get('play_count', '-'))}, "
-        f"likes={stats.get('diggCount', stats.get('digg_count', '-'))}, "
-        f"shares={stats.get('shareCount', stats.get('share_count', '-'))}"
+        "  统计: "
+        f"播放={stats.get('playCount', stats.get('play_count', '-'))}, "
+        f"点赞={stats.get('diggCount', stats.get('digg_count', '-'))}, "
+        f"分享={stats.get('shareCount', stats.get('share_count', '-'))}"
     )
-    print(f"  Play URL available: {'yes' if play_url else 'no'}")
-    print(f"  Download URL available: {'yes' if download_url else 'no'}")
-    print(f"  Media host: {urlparse(media_url).netloc if media_url else '-'}")
+    print(f"  播放 URL 可用: {'是' if play_url else '否'}")
+    print(f"  下载 URL 可用: {'是' if download_url else '否'}")
+    print(f"  媒体主机: {urlparse(media_url).netloc if media_url else '-'}")
 
 
 def headers(cookie: dict[str, str]) -> dict[str, str]:
@@ -216,12 +217,12 @@ def headers(cookie: dict[str, str]) -> dict[str, str]:
 
 
 def download_headers(user_agent: str) -> dict[str, str]:
-    """Headers for the TikTok CDN, with the session User-Agent for signing."""
+    """TikTok CDN 所用的请求头，携带会话 User-Agent 用于签名。"""
     return DOWNLOAD_HEADERS_TIKTOK | {"User-Agent": user_agent}
 
 
 def select_urls(item: dict, mode: str) -> list[tuple[str, str]]:
-    """Return ``(label, url)`` pairs for the selected mode, skipping empty URLs."""
+    """返回所选模式下的 ``(标签, url)`` 配对，跳过空 URL。"""
     pairs = []
     if mode in ("play_url", "all") and (url := item.get("play_url")):
         pairs.append(("play", url))
@@ -231,9 +232,9 @@ def select_urls(item: dict, mode: str) -> list[tuple[str, str]]:
 
 
 def safe_name(value: object) -> str:
-    """Build a filesystem-safe directory name."""
+    """构造文件系统安全的目录名。"""
     base = str(value or "unknown")
-    # Keep letters/digits and safe punctuation; replace the rest with "_".
+    # 保留字母/数字和安全标点；其余字符替换为 "_"。
     return "".join(c if (c.isalnum() or c in "._-") else "_" for c in base)
 
 
@@ -326,9 +327,9 @@ async def download_one(
     max_retry: int,
     chunk_size: int,
 ) -> bool:
-    """Stream one media URL to ``dest`` with Range-based resume and retries."""
+    """将单个媒体 URL 流式写入 ``dest``，支持基于 Range 的断点续传与重试。"""
     if dest.exists() and dest.stat().st_size > 0:
-        print(f"  SKIP (exists): {dest.name}")
+        print(f"  跳过（已存在）: {dest.name}")
         return True
     temp = dest.with_suffix(dest.suffix + ".downloading")
     for attempt in range(1, max_retry + 1):
@@ -340,21 +341,21 @@ async def download_one(
                 headers=headers | ({"Range": f"bytes={position}-"} if position else {}),
             ) as response:
                 response.raise_for_status()
-                # 200 means the server ignored Range: restart from scratch.
+                # 200 表示服务器忽略了 Range：从头开始写入。
                 mode = "ab" if response.status_code == 206 and position else "wb"
                 with open(temp, mode) as file:
                     async for chunk in response.aiter_bytes(chunk_size):
                         file.write(chunk)
             temp.replace(dest)
-            print(f"  DONE: {dest.name} ({dest.stat().st_size} bytes)")
+            print(f"  完成: {dest.name} ({dest.stat().st_size} 字节)")
             return True
         except httpx.HTTPStatusError as error:
             print(f"  HTTP {error.response.status_code}: {dest.name}")
             if error.response.status_code in (403, 404, 410):
-                print("  Link may have expired; re-fetch the metadata.")
+                print("  链接可能已过期；请重新获取元数据。")
                 return False
         except httpx.RequestError as error:
-            print(f"  RETRY {attempt}/{max_retry} {dest.name}: {error}")
+            print(f"  重试 {attempt}/{max_retry} {dest.name}: {error}")
     return False
 
 
@@ -410,20 +411,20 @@ async def download_phase(
 
     if tasks:
         print(
-            f"\nDownload: {len(tasks)} file(s) -> {download_dir} "
+            f"\n下载: {len(tasks)} 个文件 -> {download_dir} "
             f"(mode={mode}, concurrency={concurrency})"
         )
         results = await asyncio.gather(*tasks)
     else:
-        print("Download: no media URLs to download.")
+        print("下载: 没有可下载的媒体 URL。")
         results = []
     for (file_record, dest), ok in zip(file_records, results):
         file_record["ok"] = ok
         if dest.is_file():
             file_record["bytes"] = dest.stat().st_size
     ok = sum(1 for r in results if r)
-    print(f"Download summary: {ok} succeeded, {len(results) - ok} failed.")
-    print(f"Saved download manifest: {save_json('download_manifest', manifest)}")
+    print(f"下载汇总: 成功 {ok} 个，失败 {len(results) - ok} 个。")
+    print(f"已保存下载清单: {save_json('download_manifest', manifest)}")
 
 
 async def probe_profile(
@@ -437,7 +438,7 @@ async def probe_profile(
     refresh_cookie(cookie, response)
     content_type = response.headers.get("content-type", "?")
     print(
-        "Profile control: "
+        "资料页对照: "
         f"status={response.status_code}, content-type={content_type}, "
         f"bytes={len(response.content)}"
     )
@@ -470,16 +471,16 @@ async def fetch_recommend_page(
     refresh_cookie(cookie, response)
     content_type = response.headers.get("content-type", "?")
     print(
-        f"Page {page}: status={response.status_code}, content-type={content_type}, "
+        f"第 {page} 页: status={response.status_code}, content-type={content_type}, "
         f"bytes={len(response.content)}"
     )
     if "application/json" not in content_type:
-        print("Result: not JSON")
+        print("结果: 非 JSON")
         return None
     try:
         payload = response.json()
     except json.JSONDecodeError:
-        print("Result: invalid JSON")
+        print("结果: JSON 无效")
         return None
     return payload if isinstance(payload, dict) else None
 
@@ -515,19 +516,16 @@ async def fetch_recommend(
         page_items = response_items(payload)
         next_cursor, has_more = extract_pagination(payload, cursor, count)
         if not page_items:
-            print("Result: no itemList")
+            print("结果: 没有 itemList")
             break
 
         items.extend(page_items)
         pages_fetched = page
-        print(
-            f"Result: {len(page_items)} recommendation(s), "
-            f"total={len(items)}, hasMore={has_more}"
-        )
+        print(f"结果: {len(page_items)} 条推荐，累计={len(items)}, hasMore={has_more}")
         if not has_more:
             break
         if next_cursor == cursor:
-            print("Result: cursor did not advance; stopping to avoid a duplicate page.")
+            print("结果: 游标未前进；停止以避免重复翻页。")
             break
         cursor = next_cursor
         if page < max_pages:
@@ -566,27 +564,27 @@ async def main() -> int:
         "yes",
     )
     if verify_only:
-        metadata_path = Path(__file__).with_name("tiktok_recommend_metadata.json")
+        metadata_path = DEFAULT_OUTPUT_DIR / "tiktok_recommend_metadata.json"
         try:
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as error:
-            print(f"FATAL: cannot read saved metadata: {error}")
+            print(f"致命错误: 无法读取已保存的元数据: {error}")
             return 2
         if not isinstance(metadata, list) or not all(
             isinstance(item, dict) for item in metadata
         ):
-            print("FATAL: saved metadata must be a JSON list of objects")
+            print("致命错误: 已保存的元数据必须是 JSON 对象数组")
             return 2
         report = verify_downloads(metadata, url_mode, download_dir)
-        print(f"Saved verification report: {save_json('verify_report', report)}")
+        print(f"已保存校验报告: {save_json('verify_report', report)}")
         print(
-            "Verification summary: "
+            "校验汇总: "
             + ", ".join(f"{key}={value}" for key, value in report["counts"].items())
         )
         return 0
 
     if not SETTINGS_PATH.is_file():
-        print(f"FATAL: settings file not found: {SETTINGS_PATH}")
+        print(f"致命错误: 未找到配置文件: {SETTINGS_PATH}")
         return 2
     settings = json.loads(SETTINGS_PATH.read_text(encoding="utf-8-sig"))
     cookie = dict(settings.get("cookie_tiktok", {}))
@@ -594,7 +592,7 @@ async def main() -> int:
     device_id = browser_info.get("device_id", "")
     user_agent = browser_info.get("User-Agent", "")
     if not cookie.get("sessionid") or not device_id or not user_agent:
-        print("FATAL: cookie_tiktok, device_id, or User-Agent is missing")
+        print("致命错误: 缺少 cookie_tiktok、device_id 或 User-Agent")
         return 2
 
     proxy = os.getenv("TIKTOK_POC_PROXY", DEFAULT_PROXY) or None
@@ -610,12 +608,12 @@ async def main() -> int:
     max_retry = positive_int_from_env("TIKTOK_POC_MAX_RETRY", DEFAULT_MAX_RETRY)
     chunk_size = positive_int_from_env("TIKTOK_POC_CHUNK_KB", DEFAULT_CHUNK_KB) * 1024
     print(
-        f"Setup: proxy={proxy or 'direct'}, sessionid=yes, "
+        f"初始化: proxy={proxy or 'direct'}, sessionid=yes, "
         f"msToken={'yes' if cookie.get('msToken') else 'no'}, device_id={device_id}, "
         f"count={count}, max_pages={max_pages}, delay={delay}s"
     )
     print(
-        f"Download: enabled={download_enabled}, url_mode={url_mode}, "
+        f"下载: enabled={download_enabled}, url_mode={url_mode}, "
         f"dir={download_dir}, concurrency={concurrency}, max_retry={max_retry}, "
         f"chunk={chunk_size // 1024}KiB"
     )
@@ -650,28 +648,28 @@ async def main() -> int:
                     user_agent,
                 )
         except httpx.RequestError as error:
-            print(f"NETWORK ERROR: {type(error).__name__}: {error}")
+            print(f"网络错误: {type(error).__name__}: {error}")
             return 2
 
-    print("\n=== Verdict ===")
+    print("\n=== 结论 ===")
     if items:
-        print(f"Saved raw pages: {save_json('pages', payloads)}")
-        print(f"Saved itemList: {save_json('items', items)}")
-        print(f"Saved flattened metadata: {save_json('metadata', metadata)}")
+        print(f"已保存原始分页: {save_json('pages', payloads)}")
+        print(f"已保存 itemList: {save_json('items', items)}")
+        print(f"已保存扁平化元数据: {save_json('metadata', metadata)}")
         print_item_summary(items[0])
         author_ids = {item["author_id"] for item in metadata if item["author_id"]}
         print(
-            f"Summary: pages={pages_fetched}, items={len(items)}, authors={len(author_ids)}"
+            f"汇总: pages={pages_fetched}, items={len(items)}, authors={len(author_ids)}"
         )
         if has_more and pages_fetched == max_pages:
-            print("Stopped: reached TIKTOK_POC_MAX_PAGES.")
+            print("已停止: 已达到 TIKTOK_POC_MAX_PAGES。")
         elif has_more:
-            print("Stopped: pagination ended before TikTok reported the final page.")
+            print("已停止: 在 TikTok 报告最后一页之前分页已结束。")
         else:
-            print("Stopped: TikTok reported no further recommendations.")
-        print("GO: recommendation responses contain metadata and media URLs.")
+            print("已停止: TikTok 报告没有更多推荐。")
+        print("放行: 推荐响应包含元数据和媒体 URL。")
         return 0
-    print("STOP: the recommendation endpoint returned no itemList.")
+    print("终止: 推荐端点未返回 itemList。")
     return 1
 
 

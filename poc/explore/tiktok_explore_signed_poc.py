@@ -1,4 +1,4 @@
-"""Opt-in signed collection of one TikTok Explore category and its media."""
+"""对一个 TikTok Explore 分类及其媒体进行可选式签名采集。"""
 
 import argparse
 import asyncio
@@ -14,10 +14,10 @@ from urllib.parse import quote, urlencode
 
 import httpx
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from poc.tiktok_explore_replay import (  # noqa: E402
+from poc.explore.tiktok_explore_replay import (  # noqa: E402
     DEFAULT_HAR_PATH,
     DEFAULT_PROXY,
     DEFAULT_SETTINGS_PATH,
@@ -25,7 +25,7 @@ from poc.tiktok_explore_replay import (  # noqa: E402
     captured_explore_requests,
     load_session,
 )
-from poc.tiktok_explore_poc import (  # noqa: E402
+from poc.explore.tiktok_explore_poc import (  # noqa: E402
     DEFAULT_CHUNK_KB,
     DEFAULT_CONCURRENCY,
     DEFAULT_MAX_RETRY,
@@ -43,7 +43,7 @@ DEFAULT_CATEGORY_TYPE = "120"
 DEFAULT_COUNT = 20
 DEFAULT_MAX_PAGES = 2
 DEFAULT_DELAY = 1.5
-DEFAULT_OUTPUT_DIR = Path(".output/tiktok_explore_signed")
+DEFAULT_OUTPUT_DIR = Path(".output/explore/signed")
 SIGNATURE_FIELDS = {"x-bogus", "x-gnarly", "x-dynosaur"}
 
 
@@ -56,7 +56,7 @@ def build_explore_params(
     count: int,
     ms_token: str,
 ) -> list[tuple[str, str]]:
-    """Reuse a captured parameter shape while replacing mutable fields."""
+    """复用抓取到的参数结构，仅替换其中可变字段。"""
     replacements = {
         "categorytype": category_type,
         "pulltype": pull_type,
@@ -110,7 +110,7 @@ def select_template(
         ):
             return request
     raise ValueError(
-        f"no captured pullType={pull_type} request for categoryType={category_type}"
+        f"没有 categoryType={category_type} 对应的 pullType={pull_type} 抓包请求"
     )
 
 
@@ -149,7 +149,7 @@ async def fetch_explore_page(
 ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     params = template.get("params")
     if not isinstance(params, list):
-        raise ValueError("captured request parameters are missing")
+        raise ValueError("缺少抓包请求的参数")
     response = await client.get(
         signed_url(
             build_explore_params(
@@ -323,9 +323,9 @@ def positive_int(value: str) -> int:
     try:
         parsed = int(value)
     except ValueError as error:
-        raise argparse.ArgumentTypeError("must be a positive integer") from error
+        raise argparse.ArgumentTypeError("必须为正整数") from error
     if parsed < 1:
-        raise argparse.ArgumentTypeError("must be a positive integer")
+        raise argparse.ArgumentTypeError("必须为正整数")
     return parsed
 
 
@@ -333,20 +333,18 @@ def nonnegative_float(value: str) -> float:
     try:
         parsed = float(value)
     except ValueError as error:
-        raise argparse.ArgumentTypeError("must be a non-negative number") from error
+        raise argparse.ArgumentTypeError("必须为非负数") from error
     if parsed < 0:
-        raise argparse.ArgumentTypeError("must be a non-negative number")
+        raise argparse.ArgumentTypeError("必须为非负数")
     return parsed
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Opt-in pure-signed collection of a captured TikTok Explore category."
+        description="对抓包的 TikTok Explore 分类进行可选式纯签名采集。"
     )
-    parser.add_argument("--live", action="store_true", help="Send signed requests.")
-    parser.add_argument(
-        "--download", action="store_true", help="Download returned media."
-    )
+    parser.add_argument("--live", action="store_true", help="发送签名请求。")
+    parser.add_argument("--download", action="store_true", help="下载返回的媒体。")
     parser.add_argument("--category-type", default=DEFAULT_CATEGORY_TYPE)
     parser.add_argument("--count", type=positive_int, default=DEFAULT_COUNT)
     parser.add_argument("--max-pages", type=positive_int, default=DEFAULT_MAX_PAGES)
@@ -367,12 +365,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     if not args.live:
-        print("Refusing network access without --live.")
+        print("未指定 --live，拒绝联网。")
         return 2
     try:
         har = json.loads(args.har.read_text(encoding="utf-8"))
         if not isinstance(har, Mapping):
-            raise ValueError("HAR root must be an object")
+            raise ValueError("HAR 根节点必须是对象")
         requests = captured_explore_requests(har)
         initial_template, initial_pull_type = select_initial_template(
             requests, args.category_type
@@ -380,7 +378,7 @@ def main() -> int:
         next_template = select_template(requests, args.category_type, "2")
         cookie, user_agent = load_session(args.settings)
     except (OSError, ValueError, json.JSONDecodeError):
-        print("ERROR: unable to load local Explore inputs.")
+        print("错误: 无法加载本地 Explore 输入。")
         return 2
 
     async def run() -> tuple[
@@ -425,7 +423,7 @@ def main() -> int:
     try:
         metadata, report, manifest = asyncio.run(run())
     except httpx.HTTPError as error:
-        print(f"NETWORK ERROR: {type(error).__name__}")
+        print(f"网络错误: {type(error).__name__}")
         return 2
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -441,8 +439,8 @@ def main() -> int:
         )
     downloaded = sum(record["ok"] for record in manifest)
     print(
-        f"Explore category {args.category_type}: {len(metadata)} item(s), "
-        f"{len(report)} page(s), {downloaded}/{len(manifest)} media file(s) downloaded."
+        f"Explore 分类 {args.category_type}: {len(metadata)} 个条目，"
+        f"{len(report)} 页，已下载 {downloaded}/{len(manifest)} 个媒体文件。"
     )
     return 0 if metadata and (not args.download or downloaded == len(manifest)) else 1
 
