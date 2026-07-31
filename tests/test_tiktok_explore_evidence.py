@@ -1,6 +1,6 @@
 import json
 
-from poc.tiktok_explore_evidence import (
+from poc.explore.tiktok_explore_evidence import (
     sanitize_har_entries,
     sanitize_request_evidence,
 )

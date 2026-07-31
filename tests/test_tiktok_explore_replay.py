@@ -1,6 +1,6 @@
 import hashlib
 
-from poc.tiktok_explore_replay import (
+from poc.explore.tiktok_explore_replay import (
     build_replay_plan,
     cursor_progression,
     item_progression,
