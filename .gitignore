@@ -14,4 +14,12 @@ test*.py
 *.html
 /tests/
 /tests/test_tiktok_download_item_bundles.py
+!/tests/
+/tests/*
+!/tests/test_tiktok_explore_evidence.py
+!/tests/test_tiktok_explore_replay.py
+!/.agents/specs/tiktok-explore-collection.md
+!/reverse-records/
+!/reverse-records/explore_evidence.json
+!/reverse-records/explore_replay.json
 *.mp4

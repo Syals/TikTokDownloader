@@ -1,0 +1,174 @@
+{
+  "endpoint": "https://www.tiktok.com/api/explore/item_list/",
+  "category_types": [
+    "119",
+    "120",
+    "123"
+  ],
+  "results": [
+    {
+      "category_type": "120",
+      "pull_type": "1",
+      "http_status": 200,
+      "item_count": 8,
+      "item_id_hashes": [
+        "7fa01cec0cb6",
+        "ba18db1b9bb4",
+        "479cfd32ce32",
+        "944099964760",
+        "e9bf543e7413",
+        "243faa2d550b",
+        "ade6a61f4228",
+        "32078cfd6c1e"
+      ],
+      "cursor": {
+        "present": true,
+        "length": 1,
+        "sha256": "5feceb66ffc8"
+      },
+      "has_more": true,
+      "valid": true
+    },
+    {
+      "category_type": "120",
+      "pull_type": "2",
+      "http_status": 200,
+      "item_count": 8,
+      "item_id_hashes": [
+        "272dc978b09d",
+        "a82e081f6dfc",
+        "3d6a89b8e3da",
+        "e8c0d719ac56",
+        "6a7bde7bb169",
+        "4bd2dd0650fc",
+        "1bee36cab0d3",
+        "bda284d860d5"
+      ],
+      "cursor": {
+        "present": true,
+        "length": 1,
+        "sha256": "5feceb66ffc8"
+      },
+      "has_more": true,
+      "valid": true
+    },
+    {
+      "category_type": "123",
+      "pull_type": "1",
+      "http_status": 200,
+      "item_count": 4,
+      "item_id_hashes": [
+        "f253804d5d7f",
+        "5b8741d9ee83",
+        "9982460f564e",
+        "bd6c602fc91c"
+      ],
+      "cursor": {
+        "present": true,
+        "length": 1,
+        "sha256": "5feceb66ffc8"
+      },
+      "has_more": true,
+      "valid": true
+    },
+    {
+      "category_type": "123",
+      "pull_type": "2",
+      "http_status": 200,
+      "item_count": 6,
+      "item_id_hashes": [
+        "d8d8721f24bd",
+        "4feb50f7abea",
+        "fb462cd5a1ee",
+        "e27114310383",
+        "f36fc2cf378d",
+        "45054037fe17"
+      ],
+      "cursor": {
+        "present": true,
+        "length": 1,
+        "sha256": "5feceb66ffc8"
+      },
+      "has_more": true,
+      "valid": true
+    },
+    {
+      "category_type": "119",
+      "pull_type": "2",
+      "http_status": 200,
+      "item_count": 8,
+      "item_id_hashes": [
+        "64d46eea3830",
+        "040f7e0cf0f4",
+        "93c8c99df1fc",
+        "50419b10d6d2",
+        "f1d6a8ad7e6a",
+        "d87d00dcedb8",
+        "dfe0db5b771a",
+        "06cc2d484159"
+      ],
+      "cursor": {
+        "present": true,
+        "length": 1,
+        "sha256": "5feceb66ffc8"
+      },
+      "has_more": true,
+      "valid": true
+    },
+    {
+      "category_type": "119",
+      "pull_type": "2",
+      "http_status": 200,
+      "item_count": 8,
+      "item_id_hashes": [
+        "d282e9aecd7f",
+        "83db1edb4880",
+        "ef9b81ec4754",
+        "0fa7e6aa1af0",
+        "9c95a10d68af",
+        "50dfb86b9ea1",
+        "e1d4be770010",
+        "bd26603f6a46"
+      ],
+      "cursor": {
+        "present": true,
+        "length": 1,
+        "sha256": "5feceb66ffc8"
+      },
+      "has_more": true,
+      "valid": true
+    }
+  ],
+  "cursor_progression": {
+    "120": false,
+    "123": false,
+    "119": false
+  },
+  "item_progression": {
+    "120": {
+      "request_count": 2,
+      "new_item_counts": [
+        8,
+        8
+      ],
+      "advanced": true
+    },
+    "123": {
+      "request_count": 2,
+      "new_item_counts": [
+        4,
+        6
+      ],
+      "advanced": true
+    },
+    "119": {
+      "request_count": 2,
+      "new_item_counts": [
+        8,
+        8
+      ],
+      "advanced": true
+    }
+  },
+  "passed": true
+}

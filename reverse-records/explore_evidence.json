@@ -1,0 +1,5487 @@
+[
+  {
+    "action": "explore_session",
+    "category_name": "mixed",
+    "request": {
+      "endpoint": "https://www.tiktok.com/api/explore/item_list/",
+      "method": "GET",
+      "query": {
+        "WebIdLastTime": {
+          "type": "string",
+          "length": 10
+        },
+        "aid": {
+          "type": "string",
+          "length": 4
+        },
+        "app_language": {
+          "type": "string",
+          "length": 6
+        },
+        "app_name": {
+          "type": "string",
+          "length": 10
+        },
+        "browser_language": {
+          "type": "string",
+          "length": 2
+        },
+        "browser_name": {
+          "type": "string",
+          "length": 7
+        },
+        "browser_online": {
+          "type": "string",
+          "length": 4
+        },
+        "browser_platform": {
+          "type": "string",
+          "length": 5
+        },
+        "browser_version": {
+          "type": "string",
+          "length": 103
+        },
+        "categoryType": {
+          "type": "string",
+          "length": 3,
+          "value": "120"
+        },
+        "channel": {
+          "type": "string",
+          "length": 10
+        },
+        "clientABVersions": {
+          "type": "string",
+          "length": 431
+        },
+        "cookie_enabled": {
+          "redacted": true,
+          "length": 4
+        },
+        "count": {
+          "type": "string",
+          "length": 1
+        },
+        "data_collection_enabled": {
+          "type": "string",
+          "length": 4
+        },
+        "device_id": {
+          "type": "string",
+          "length": 19
+        },
+        "device_platform": {
+          "type": "string",
+          "length": 6
+        },
+        "enable_cache": {
+          "type": "string",
+          "length": 5
+        },
+        "focus_state": {
+          "type": "string",
+          "length": 4
+        },
+        "history_len": {
+          "type": "string",
+          "length": 1
+        },
+        "is_fullscreen": {
+          "type": "string",
+          "length": 5
+        },
+        "is_new_user": {
+          "type": "string",
+          "length": 5
+        },
+        "is_page_visible": {
+          "type": "string",
+          "length": 4
+        },
+        "language": {
+          "type": "string",
+          "length": 2
+        },
+        "odinId": {
+          "type": "string",
+          "length": 19
+        },
+        "os": {
+          "type": "string",
+          "length": 7
+        },
+        "priority_region": {
+          "type": "string",
+          "length": 2
+        },
+        "pullType": {
+          "type": "string",
+          "length": 1,
+          "value": "1"
+        },
+        "referer": {
+          "type": "string",
+          "length": 0
+        },
+        "region": {
+          "type": "string",
+          "length": 2
+        },
+        "screen_height": {
+          "type": "string",
+          "length": 4
+        },
+        "screen_width": {
+          "type": "string",
+          "length": 4
+        },
+        "tz_name": {
+          "type": "string",
+          "length": 13
+        },
+        "user_is_login": {
+          "type": "string",
+          "length": 4
+        },
+        "verifyFp": {
+          "type": "string",
+          "length": 52
+        },
+        "video_encoding": {
+          "type": "string",
+          "length": 4
+        },
+        "webcast_language": {
+          "type": "string",
+          "length": 6
+        }
+      },
+      "headers": {
+        ":authority": {
+          "type": "string",
+          "length": 14
+        },
+        ":method": {
+          "type": "string",
+          "length": 3
+        },
+        ":path": {
+          "type": "string",
+          "length": 1426
+        },
+        ":scheme": {
+          "type": "string",
+          "length": 5
+        },
+        "accept": {
+          "type": "string",
+          "length": 3
+        },
+        "accept-encoding": {
+          "type": "string",
+          "length": 23
+        },
+        "accept-language": {
+          "type": "string",
+          "length": 60
+        },
+        "priority": {
+          "type": "string",
+          "length": 6
+        },
+        "referer": {
+          "type": "string",
+          "length": 30
+        },
+        "sec-ch-ua": {
+          "type": "string",
+          "length": 64
+        },
+        "sec-ch-ua-mobile": {
+          "type": "string",
+          "length": 2
+        },
+        "sec-ch-ua-platform": {
+          "type": "string",
+          "length": 9
+        },
+        "sec-fetch-dest": {
+          "type": "string",
+          "length": 5
+        },
+        "sec-fetch-mode": {
+          "type": "string",
+          "length": 4
+        },
+        "sec-fetch-site": {
+          "type": "string",
+          "length": 11
+        },
+        "user-agent": {
+          "type": "string",
+          "length": 111
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "access-control-expose-headers": {
+          "type": "string",
+          "length": 25
+        },
+        "bd-tt-error-code": {
+          "type": "string",
+          "length": 1
+        },
+        "cache-control": {
+          "type": "string",
+          "length": 29
+        },
+        "content-encoding": {
+          "type": "string",
+          "length": 2
+        },
+        "content-type": {
+          "type": "string",
+          "length": 31
+        },
+        "date": {
+          "type": "string",
+          "length": 29
+        },
+        "expires": {
+          "type": "string",
+          "length": 29
+        },
+        "pragma": {
+          "type": "string",
+          "length": 8
+        },
+        "server": {
+          "type": "string",
+          "length": 5
+        },
+        "server-timing": {
+          "type": "string",
+          "length": 14
+        },
+        "tt-ticket-guard-result": {
+          "type": "string",
+          "length": 1
+        },
+        "tt_stable": {
+          "type": "string",
+          "length": 1
+        },
+        "x-akamai-request-id": {
+          "type": "string",
+          "length": 17
+        },
+        "x-cache": {
+          "type": "string",
+          "length": 115
+        },
+        "x-cache-remote": {
+          "type": "string",
+          "length": 115
+        },
+        "x-ms-token": {
+          "redacted": true,
+          "length": 160
+        },
+        "x-origin-response-time": {
+          "type": "string",
+          "length": 16
+        },
+        "x-parent-response-time": {
+          "type": "string",
+          "length": 16
+        },
+        "x-tt-logid": {
+          "type": "string",
+          "length": 34
+        },
+        "x-tt-trace-host": {
+          "type": "string",
+          "length": 290
+        },
+        "x-tt-trace-id": {
+          "type": "string",
+          "length": 55
+        },
+        "x-tt-trace-tag": {
+          "type": "string",
+          "length": 29
+        }
+      },
+      "set_cookie_names": [],
+      "body": {
+        "root_type": "object",
+        "keys": [
+          "cursor",
+          "extra",
+          "hasMore",
+          "itemList",
+          "log_pb",
+          "statusCode",
+          "status_code",
+          "status_msg"
+        ],
+        "item_containers": {
+          "itemList": 8
+        },
+        "pagination": {
+          "cursor": {
+            "redacted": true,
+            "length": 1
+          },
+          "hasMore": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      "body_source": "response_sample"
+    }
+  },
+  {
+    "action": "explore_session",
+    "category_name": "mixed",
+    "request": {
+      "endpoint": "https://www.tiktok.com/api/explore/item_list/",
+      "method": "GET",
+      "query": {
+        "WebIdLastTime": {
+          "type": "string",
+          "length": 10
+        },
+        "X-Bogus": {
+          "redacted": true,
+          "length": 1
+        },
+        "X-Dynosaur": {
+          "redacted": true,
+          "length": 392
+        },
+        "X-Gnarly": {
+          "redacted": true,
+          "length": 332
+        },
+        "aid": {
+          "type": "string",
+          "length": 4
+        },
+        "app_language": {
+          "type": "string",
+          "length": 6
+        },
+        "app_name": {
+          "type": "string",
+          "length": 10
+        },
+        "browser_language": {
+          "type": "string",
+          "length": 2
+        },
+        "browser_name": {
+          "type": "string",
+          "length": 7
+        },
+        "browser_online": {
+          "type": "string",
+          "length": 4
+        },
+        "browser_platform": {
+          "type": "string",
+          "length": 5
+        },
+        "browser_version": {
+          "type": "string",
+          "length": 103
+        },
+        "categoryType": {
+          "type": "string",
+          "length": 3,
+          "value": "120"
+        },
+        "channel": {
+          "type": "string",
+          "length": 10
+        },
+        "clientABVersions": {
+          "type": "string",
+          "length": 431
+        },
+        "cookie_enabled": {
+          "redacted": true,
+          "length": 4
+        },
+        "count": {
+          "type": "string",
+          "length": 1
+        },
+        "data_collection_enabled": {
+          "type": "string",
+          "length": 4
+        },
+        "device_id": {
+          "type": "string",
+          "length": 19
+        },
+        "device_platform": {
+          "type": "string",
+          "length": 6
+        },
+        "enable_cache": {
+          "type": "string",
+          "length": 5
+        },
+        "focus_state": {
+          "type": "string",
+          "length": 4
+        },
+        "from_page": {
+          "type": "string",
+          "length": 0
+        },
+        "history_len": {
+          "type": "string",
+          "length": 1
+        },
+        "is_fullscreen": {
+          "type": "string",
+          "length": 5
+        },
+        "is_new_user": {
+          "type": "string",
+          "length": 5
+        },
+        "is_page_visible": {
+          "type": "string",
+          "length": 4
+        },
+        "language": {
+          "type": "string",
+          "length": 2
+        },
+        "msToken": {
+          "redacted": true,
+          "length": 160
+        },
+        "odinId": {
+          "type": "string",
+          "length": 19
+        },
+        "os": {
+          "type": "string",
+          "length": 7
+        },
+        "priority_region": {
+          "type": "string",
+          "length": 2
+        },
+        "pullType": {
+          "type": "string",
+          "length": 1,
+          "value": "2"
+        },
+        "referer": {
+          "type": "string",
+          "length": 0
+        },
+        "region": {
+          "type": "string",
+          "length": 2
+        },
+        "screen_height": {
+          "type": "string",
+          "length": 4
+        },
+        "screen_width": {
+          "type": "string",
+          "length": 4
+        },
+        "tz_name": {
+          "type": "string",
+          "length": 13
+        },
+        "user_is_login": {
+          "type": "string",
+          "length": 4
+        },
+        "verifyFp": {
+          "type": "string",
+          "length": 52
+        },
+        "video_encoding": {
+          "type": "string",
+          "length": 4
+        },
+        "webcast_language": {
+          "type": "string",
+          "length": 6
+        }
+      },
+      "headers": {
+        ":authority": {
+          "type": "string",
+          "length": 14
+        },
+        ":method": {
+          "type": "string",
+          "length": 3
+        },
+        ":path": {
+          "type": "string",
+          "length": 2362
+        },
+        ":scheme": {
+          "type": "string",
+          "length": 5
+        },
+        "accept": {
+          "type": "string",
+          "length": 3
+        },
+        "accept-encoding": {
+          "type": "string",
+          "length": 23
+        },
+        "accept-language": {
+          "type": "string",
+          "length": 60
+        },
+        "priority": {
+          "type": "string",
+          "length": 6
+        },
+        "referer": {
+          "type": "string",
+          "length": 30
+        },
+        "sec-ch-ua": {
+          "type": "string",
+          "length": 64
+        },
+        "sec-ch-ua-mobile": {
+          "type": "string",
+          "length": 2
+        },
+        "sec-ch-ua-platform": {
+          "type": "string",
+          "length": 9
+        },
+        "sec-fetch-dest": {
+          "type": "string",
+          "length": 5
+        },
+        "sec-fetch-mode": {
+          "type": "string",
+          "length": 4
+        },
+        "sec-fetch-site": {
+          "type": "string",
+          "length": 11
+        },
+        "user-agent": {
+          "type": "string",
+          "length": 111
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "access-control-expose-headers": {
+          "type": "string",
+          "length": 25
+        },
+        "bd-tt-error-code": {
+          "type": "string",
+          "length": 1
+        },
+        "cache-control": {
+          "type": "string",
+          "length": 29
+        },
+        "content-encoding": {
+          "type": "string",
+          "length": 2
+        },
+        "content-type": {
+          "type": "string",
+          "length": 31
+        },
+        "date": {
+          "type": "string",
+          "length": 29
+        },
+        "expires": {
+          "type": "string",
+          "length": 29
+        },
+        "pragma": {
+          "type": "string",
+          "length": 8
+        },
+        "server": {
+          "type": "string",
+          "length": 5
+        },
+        "server-timing": {
+          "type": "string",
+          "length": 14
+        },
+        "tt-ticket-guard-result": {
+          "type": "string",
+          "length": 1
+        },
+        "tt_stable": {
+          "type": "string",
+          "length": 1
+        },
+        "x-akamai-request-id": {
+          "type": "string",
+          "length": 17
+        },
+        "x-cache": {
+          "type": "string",
+          "length": 115
+        },
+        "x-cache-remote": {
+          "type": "string",
+          "length": 114
+        },
+        "x-ms-token": {
+          "redacted": true,
+          "length": 160
+        },
+        "x-origin-response-time": {
+          "type": "string",
+          "length": 15
+        },
+        "x-parent-response-time": {
+          "type": "string",
+          "length": 16
+        },
+        "x-tt-logid": {
+          "type": "string",
+          "length": 34
+        },
+        "x-tt-trace-host": {
+          "type": "string",
+          "length": 322
+        },
+        "x-tt-trace-id": {
+          "type": "string",
+          "length": 55
+        },
+        "x-tt-trace-tag": {
+          "type": "string",
+          "length": 29
+        }
+      },
+      "set_cookie_names": [],
+      "body": {
+        "root_type": "object",
+        "keys": [
+          "cursor",
+          "extra",
+          "hasMore",
+          "itemList",
+          "log_pb",
+          "statusCode",
+          "status_code",
+          "status_msg"
+        ],
+        "item_containers": {
+          "itemList": 8
+        },
+        "pagination": {
+          "cursor": {
+            "redacted": true,
+            "length": 1
+          },
+          "hasMore": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      "body_source": "response_sample"
+    }
+  },
+  {
+    "action": "explore_session",
+    "category_name": "mixed",
+    "request": {
+      "endpoint": "https://www.tiktok.com/api/explore/item_list/",
+      "method": "GET",
+      "query": {
+        "WebIdLastTime": {
+          "type": "string",
+          "length": 10
+        },
+        "X-Bogus": {
+          "redacted": true,
+          "length": 1
+        },
+        "X-Dynosaur": {
+          "redacted": true,
+          "length": 392
+        },
+        "X-Gnarly": {
+          "redacted": true,
+          "length": 332
+        },
+        "aid": {
+          "type": "string",
+          "length": 4
+        },
+        "app_language": {
+          "type": "string",
+          "length": 6
+        },
+        "app_name": {
+          "type": "string",
+          "length": 10
+        },
+        "browser_language": {
+          "type": "string",
+          "length": 2
+        },
+        "browser_name": {
+          "type": "string",
+          "length": 7
+        },
+        "browser_online": {
+          "type": "string",
+          "length": 4
+        },
+        "browser_platform": {
+          "type": "string",
+          "length": 5
+        },
+        "browser_version": {
+          "type": "string",
+          "length": 103
+        },
+        "categoryType": {
+          "type": "string",
+          "length": 3,
+          "value": "120"
+        },
+        "channel": {
+          "type": "string",
+          "length": 10
+        },
+        "clientABVersions": {
+          "type": "string",
+          "length": 431
+        },
+        "cookie_enabled": {
+          "redacted": true,
+          "length": 4
+        },
+        "count": {
+          "type": "string",
+          "length": 1
+        },
+        "data_collection_enabled": {
+          "type": "string",
+          "length": 4
+        },
+        "device_id": {
+          "type": "string",
+          "length": 19
+        },
+        "device_platform": {
+          "type": "string",
+          "length": 6
+        },
+        "enable_cache": {
+          "type": "string",
+          "length": 5
+        },
+        "focus_state": {
+          "type": "string",
+          "length": 4
+        },
+        "from_page": {
+          "type": "string",
+          "length": 0
+        },
+        "history_len": {
+          "type": "string",
+          "length": 1
+        },
+        "is_fullscreen": {
+          "type": "string",
+          "length": 5
+        },
+        "is_new_user": {
+          "type": "string",
+          "length": 5
+        },
+        "is_page_visible": {
+          "type": "string",
+          "length": 4
+        },
+        "language": {
+          "type": "string",
+          "length": 2
+        },
+        "msToken": {
+          "redacted": true,
+          "length": 160
+        },
+        "odinId": {
+          "type": "string",
+          "length": 19
+        },
+        "os": {
+          "type": "string",
+          "length": 7
+        },
+        "priority_region": {
+          "type": "string",
+          "length": 2
+        },
+        "pullType": {
+          "type": "string",
+          "length": 1,
+          "value": "2"
+        },
+        "referer": {
+          "type": "string",
+          "length": 0
+        },
+        "region": {
+          "type": "string",
+          "length": 2
+        },
+        "screen_height": {
+          "type": "string",
+          "length": 4
+        },
+        "screen_width": {
+          "type": "string",
+          "length": 4
+        },
+        "tz_name": {
+          "type": "string",
+          "length": 13
+        },
+        "user_is_login": {
+          "type": "string",
+          "length": 4
+        },
+        "verifyFp": {
+          "type": "string",
+          "length": 52
+        },
+        "video_encoding": {
+          "type": "string",
+          "length": 4
+        },
+        "webcast_language": {
+          "type": "string",
+          "length": 6
+        }
+      },
+      "headers": {
+        ":authority": {
+          "type": "string",
+          "length": 14
+        },
+        ":method": {
+          "type": "string",
+          "length": 3
+        },
+        ":path": {
+          "type": "string",
+          "length": 2362
+        },
+        ":scheme": {
+          "type": "string",
+          "length": 5
+        },
+        "accept": {
+          "type": "string",
+          "length": 3
+        },
+        "accept-encoding": {
+          "type": "string",
+          "length": 23
+        },
+        "accept-language": {
+          "type": "string",
+          "length": 60
+        },
+        "priority": {
+          "type": "string",
+          "length": 6
+        },
+        "referer": {
+          "type": "string",
+          "length": 30
+        },
+        "sec-ch-ua": {
+          "type": "string",
+          "length": 64
+        },
+        "sec-ch-ua-mobile": {
+          "type": "string",
+          "length": 2
+        },
+        "sec-ch-ua-platform": {
+          "type": "string",
+          "length": 9
+        },
+        "sec-fetch-dest": {
+          "type": "string",
+          "length": 5
+        },
+        "sec-fetch-mode": {
+          "type": "string",
+          "length": 4
+        },
+        "sec-fetch-site": {
+          "type": "string",
+          "length": 11
+        },
+        "user-agent": {
+          "type": "string",
+          "length": 111
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "access-control-expose-headers": {
+          "type": "string",
+          "length": 25
+        },
+        "bd-tt-error-code": {
+          "type": "string",
+          "length": 1
+        },
+        "cache-control": {
+          "type": "string",
+          "length": 29
+        },
+        "content-encoding": {
+          "type": "string",
+          "length": 2
+        },
+        "content-type": {
+          "type": "string",
+          "length": 31
+        },
+        "date": {
+          "type": "string",
+          "length": 29
+        },
+        "expires": {
+          "type": "string",
+          "length": 29
+        },
+        "pragma": {
+          "type": "string",
+          "length": 8
+        },
+        "server": {
+          "type": "string",
+          "length": 5
+        },
+        "server-timing": {
+          "type": "string",
+          "length": 14
+        },
+        "tt-ticket-guard-result": {
+          "type": "string",
+          "length": 1
+        },
+        "tt_stable": {
+          "type": "string",
+          "length": 1
+        },
+        "x-akamai-request-id": {
+          "type": "string",
+          "length": 17
+        },
+        "x-cache": {
+          "type": "string",
+          "length": 115
+        },
+        "x-cache-remote": {
+          "type": "string",
+          "length": 115
+        },
+        "x-ms-token": {
+          "redacted": true,
+          "length": 160
+        },
+        "x-origin-response-time": {
+          "type": "string",
+          "length": 16
+        },
+        "x-parent-response-time": {
+          "type": "string",
+          "length": 16
+        },
+        "x-tt-logid": {
+          "type": "string",
+          "length": 34
+        },
+        "x-tt-trace-host": {
+          "type": "string",
+          "length": 322
+        },
+        "x-tt-trace-id": {
+          "type": "string",
+          "length": 55
+        },
+        "x-tt-trace-tag": {
+          "type": "string",
+          "length": 29
+        }
+      },
+      "set_cookie_names": [],
+      "body": {
+        "root_type": "object",
+        "keys": [
+          "cursor",
+          "extra",
+          "hasMore",
+          "itemList",
+          "log_pb",
+          "statusCode",
+          "status_code",
+          "status_msg"
+        ],
+        "item_containers": {
+          "itemList": 8
+        },
+        "pagination": {
+          "cursor": {
+            "redacted": true,
+            "length": 1
+          },
+          "hasMore": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      "body_source": "response_sample"
+    }
+  },
+  {
+    "action": "explore_session",
+    "category_name": "mixed",
+    "request": {
+      "endpoint": "https://www.tiktok.com/api/explore/item_list/",
+      "method": "GET",
+      "query": {
+        "WebIdLastTime": {
+          "type": "string",
+          "length": 10
+        },
+        "X-Bogus": {
+          "redacted": true,
+          "length": 1
+        },
+        "X-Dynosaur": {
+          "redacted": true,
+          "length": 444
+        },
+        "X-Gnarly": {
+          "redacted": true,
+          "length": 332
+        },
+        "aid": {
+          "type": "string",
+          "length": 4
+        },
+        "app_language": {
+          "type": "string",
+          "length": 6
+        },
+        "app_name": {
+          "type": "string",
+          "length": 10
+        },
+        "browser_language": {
+          "type": "string",
+          "length": 2
+        },
+        "browser_name": {
+          "type": "string",
+          "length": 7
+        },
+        "browser_online": {
+          "type": "string",
+          "length": 4
+        },
+        "browser_platform": {
+          "type": "string",
+          "length": 5
+        },
+        "browser_version": {
+          "type": "string",
+          "length": 103
+        },
+        "categoryType": {
+          "type": "string",
+          "length": 3,
+          "value": "123"
+        },
+        "channel": {
+          "type": "string",
+          "length": 10
+        },
+        "clientABVersions": {
+          "type": "string",
+          "length": 431
+        },
+        "cookie_enabled": {
+          "redacted": true,
+          "length": 4
+        },
+        "count": {
+          "type": "string",
+          "length": 1
+        },
+        "data_collection_enabled": {
+          "type": "string",
+          "length": 4
+        },
+        "device_id": {
+          "type": "string",
+          "length": 19
+        },
+        "device_platform": {
+          "type": "string",
+          "length": 6
+        },
+        "enable_cache": {
+          "type": "string",
+          "length": 5
+        },
+        "focus_state": {
+          "type": "string",
+          "length": 4
+        },
+        "from_page": {
+          "type": "string",
+          "length": 0
+        },
+        "history_len": {
+          "type": "string",
+          "length": 1
+        },
+        "is_fullscreen": {
+          "type": "string",
+          "length": 5
+        },
+        "is_new_user": {
+          "type": "string",
+          "length": 5
+        },
+        "is_page_visible": {
+          "type": "string",
+          "length": 4
+        },
+        "language": {
+          "type": "string",
+          "length": 2
+        },
+        "msToken": {
+          "redacted": true,
+          "length": 160
+        },
+        "odinId": {
+          "type": "string",
+          "length": 19
+        },
+        "os": {
+          "type": "string",
+          "length": 7
+        },
+        "priority_region": {
+          "type": "string",
+          "length": 2
+        },
+        "pullType": {
+          "type": "string",
+          "length": 1,
+          "value": "1"
+        },
+        "referer": {
+          "type": "string",
+          "length": 0
+        },
+        "region": {
+          "type": "string",
+          "length": 2
+        },
+        "screen_height": {
+          "type": "string",
+          "length": 4
+        },
+        "screen_width": {
+          "type": "string",
+          "length": 4
+        },
+        "tz_name": {
+          "type": "string",
+          "length": 13
+        },
+        "user_is_login": {
+          "type": "string",
+          "length": 4
+        },
+        "verifyFp": {
+          "type": "string",
+          "length": 52
+        },
+        "video_encoding": {
+          "type": "string",
+          "length": 4
+        },
+        "webcast_language": {
+          "type": "string",
+          "length": 6
+        }
+      },
+      "headers": {
+        ":authority": {
+          "type": "string",
+          "length": 14
+        },
+        ":method": {
+          "type": "string",
+          "length": 3
+        },
+        ":path": {
+          "type": "string",
+          "length": 2414
+        },
+        ":scheme": {
+          "type": "string",
+          "length": 5
+        },
+        "accept": {
+          "type": "string",
+          "length": 3
+        },
+        "accept-encoding": {
+          "type": "string",
+          "length": 23
+        },
+        "accept-language": {
+          "type": "string",
+          "length": 60
+        },
+        "priority": {
+          "type": "string",
+          "length": 6
+        },
+        "referer": {
+          "type": "string",
+          "length": 30
+        },
+        "sec-ch-ua": {
+          "type": "string",
+          "length": 64
+        },
+        "sec-ch-ua-mobile": {
+          "type": "string",
+          "length": 2
+        },
+        "sec-ch-ua-platform": {
+          "type": "string",
+          "length": 9
+        },
+        "sec-fetch-dest": {
+          "type": "string",
+          "length": 5
+        },
+        "sec-fetch-mode": {
+          "type": "string",
+          "length": 4
+        },
+        "sec-fetch-site": {
+          "type": "string",
+          "length": 11
+        },
+        "user-agent": {
+          "type": "string",
+          "length": 111
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "access-control-expose-headers": {
+          "type": "string",
+          "length": 25
+        },
+        "bd-tt-error-code": {
+          "type": "string",
+          "length": 1
+        },
+        "cache-control": {
+          "type": "string",
+          "length": 29
+        },
+        "content-encoding": {
+          "type": "string",
+          "length": 2
+        },
+        "content-type": {
+          "type": "string",
+          "length": 31
+        },
+        "date": {
+          "type": "string",
+          "length": 29
+        },
+        "expires": {
+          "type": "string",
+          "length": 29
+        },
+        "pragma": {
+          "type": "string",
+          "length": 8
+        },
+        "server": {
+          "type": "string",
+          "length": 5
+        },
+        "server-timing": {
+          "type": "string",
+          "length": 14
+        },
+        "tt-ticket-guard-result": {
+          "type": "string",
+          "length": 1
+        },
+        "tt_stable": {
+          "type": "string",
+          "length": 1
+        },
+        "x-akamai-request-id": {
+          "type": "string",
+          "length": 17
+        },
+        "x-cache": {
+          "type": "string",
+          "length": 115
+        },
+        "x-cache-remote": {
+          "type": "string",
+          "length": 114
+        },
+        "x-ms-token": {
+          "redacted": true,
+          "length": 160
+        },
+        "x-origin-response-time": {
+          "type": "string",
+          "length": 15
+        },
+        "x-parent-response-time": {
+          "type": "string",
+          "length": 16
+        },
+        "x-tt-logid": {
+          "type": "string",
+          "length": 34
+        },
+        "x-tt-trace-host": {
+          "type": "string",
+          "length": 290
+        },
+        "x-tt-trace-id": {
+          "type": "string",
+          "length": 55
+        },
+        "x-tt-trace-tag": {
+          "type": "string",
+          "length": 29
+        }
+      },
+      "set_cookie_names": [],
+      "body": {
+        "root_type": "object",
+        "keys": [
+          "cursor",
+          "extra",
+          "hasMore",
+          "itemList",
+          "log_pb",
+          "statusCode",
+          "status_code",
+          "status_msg"
+        ],
+        "item_containers": {
+          "itemList": 8
+        },
+        "pagination": {
+          "cursor": {
+            "redacted": true,
+            "length": 1
+          },
+          "hasMore": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      "body_source": "response_sample"
+    }
+  },
+  {
+    "action": "explore_session",
+    "category_name": "mixed",
+    "request": {
+      "endpoint": "https://www.tiktok.com/api/explore/item_list/",
+      "method": "GET",
+      "query": {
+        "WebIdLastTime": {
+          "type": "string",
+          "length": 10
+        },
+        "X-Bogus": {
+          "redacted": true,
+          "length": 1
+        },
+        "X-Dynosaur": {
+          "redacted": true,
+          "length": 444
+        },
+        "X-Gnarly": {
+          "redacted": true,
+          "length": 332
+        },
+        "aid": {
+          "type": "string",
+          "length": 4
+        },
+        "app_language": {
+          "type": "string",
+          "length": 6
+        },
+        "app_name": {
+          "type": "string",
+          "length": 10
+        },
+        "browser_language": {
+          "type": "string",
+          "length": 2
+        },
+        "browser_name": {
+          "type": "string",
+          "length": 7
+        },
+        "browser_online": {
+          "type": "string",
+          "length": 4
+        },
+        "browser_platform": {
+          "type": "string",
+          "length": 5
+        },
+        "browser_version": {
+          "type": "string",
+          "length": 103
+        },
+        "categoryType": {
+          "type": "string",
+          "length": 3,
+          "value": "123"
+        },
+        "channel": {
+          "type": "string",
+          "length": 10
+        },
+        "clientABVersions": {
+          "type": "string",
+          "length": 431
+        },
+        "cookie_enabled": {
+          "redacted": true,
+          "length": 4
+        },
+        "count": {
+          "type": "string",
+          "length": 1
+        },
+        "data_collection_enabled": {
+          "type": "string",
+          "length": 4
+        },
+        "device_id": {
+          "type": "string",
+          "length": 19
+        },
+        "device_platform": {
+          "type": "string",
+          "length": 6
+        },
+        "enable_cache": {
+          "type": "string",
+          "length": 5
+        },
+        "focus_state": {
+          "type": "string",
+          "length": 4
+        },
+        "from_page": {
+          "type": "string",
+          "length": 0
+        },
+        "history_len": {
+          "type": "string",
+          "length": 1
+        },
+        "is_fullscreen": {
+          "type": "string",
+          "length": 5
+        },
+        "is_new_user": {
+          "type": "string",
+          "length": 5
+        },
+        "is_page_visible": {
+          "type": "string",
+          "length": 4
+        },
+        "language": {
+          "type": "string",
+          "length": 2
+        },
+        "msToken": {
+          "redacted": true,
+          "length": 160
+        },
+        "odinId": {
+          "type": "string",
+          "length": 19
+        },
+        "os": {
+          "type": "string",
+          "length": 7
+        },
+        "priority_region": {
+          "type": "string",
+          "length": 2
+        },
+        "pullType": {
+          "type": "string",
+          "length": 1,
+          "value": "2"
+        },
+        "referer": {
+          "type": "string",
+          "length": 0
+        },
+        "region": {
+          "type": "string",
+          "length": 2
+        },
+        "screen_height": {
+          "type": "string",
+          "length": 4
+        },
+        "screen_width": {
+          "type": "string",
+          "length": 4
+        },
+        "tz_name": {
+          "type": "string",
+          "length": 13
+        },
+        "user_is_login": {
+          "type": "string",
+          "length": 4
+        },
+        "verifyFp": {
+          "type": "string",
+          "length": 52
+        },
+        "video_encoding": {
+          "type": "string",
+          "length": 4
+        },
+        "webcast_language": {
+          "type": "string",
+          "length": 6
+        }
+      },
+      "headers": {
+        ":authority": {
+          "type": "string",
+          "length": 14
+        },
+        ":method": {
+          "type": "string",
+          "length": 3
+        },
+        ":path": {
+          "type": "string",
+          "length": 2414
+        },
+        ":scheme": {
+          "type": "string",
+          "length": 5
+        },
+        "accept": {
+          "type": "string",
+          "length": 3
+        },
+        "accept-encoding": {
+          "type": "string",
+          "length": 23
+        },
+        "accept-language": {
+          "type": "string",
+          "length": 60
+        },
+        "priority": {
+          "type": "string",
+          "length": 6
+        },
+        "referer": {
+          "type": "string",
+          "length": 30
+        },
+        "sec-ch-ua": {
+          "type": "string",
+          "length": 64
+        },
+        "sec-ch-ua-mobile": {
+          "type": "string",
+          "length": 2
+        },
+        "sec-ch-ua-platform": {
+          "type": "string",
+          "length": 9
+        },
+        "sec-fetch-dest": {
+          "type": "string",
+          "length": 5
+        },
+        "sec-fetch-mode": {
+          "type": "string",
+          "length": 4
+        },
+        "sec-fetch-site": {
+          "type": "string",
+          "length": 11
+        },
+        "user-agent": {
+          "type": "string",
+          "length": 111
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "access-control-expose-headers": {
+          "type": "string",
+          "length": 25
+        },
+        "bd-tt-error-code": {
+          "type": "string",
+          "length": 1
+        },
+        "cache-control": {
+          "type": "string",
+          "length": 29
+        },
+        "content-encoding": {
+          "type": "string",
+          "length": 2
+        },
+        "content-type": {
+          "type": "string",
+          "length": 31
+        },
+        "date": {
+          "type": "string",
+          "length": 29
+        },
+        "expires": {
+          "type": "string",
+          "length": 29
+        },
+        "pragma": {
+          "type": "string",
+          "length": 8
+        },
+        "server": {
+          "type": "string",
+          "length": 5
+        },
+        "server-timing": {
+          "type": "string",
+          "length": 14
+        },
+        "tt-ticket-guard-result": {
+          "type": "string",
+          "length": 1
+        },
+        "tt_stable": {
+          "type": "string",
+          "length": 1
+        },
+        "x-akamai-request-id": {
+          "type": "string",
+          "length": 17
+        },
+        "x-cache": {
+          "type": "string",
+          "length": 115
+        },
+        "x-cache-remote": {
+          "type": "string",
+          "length": 116
+        },
+        "x-ms-token": {
+          "redacted": true,
+          "length": 160
+        },
+        "x-origin-response-time": {
+          "type": "string",
+          "length": 17
+        },
+        "x-parent-response-time": {
+          "type": "string",
+          "length": 16
+        },
+        "x-tt-logid": {
+          "type": "string",
+          "length": 34
+        },
+        "x-tt-trace-host": {
+          "type": "string",
+          "length": 322
+        },
+        "x-tt-trace-id": {
+          "type": "string",
+          "length": 55
+        },
+        "x-tt-trace-tag": {
+          "type": "string",
+          "length": 29
+        }
+      },
+      "set_cookie_names": [],
+      "body": {
+        "root_type": "object",
+        "keys": [
+          "cursor",
+          "extra",
+          "hasMore",
+          "itemList",
+          "log_pb",
+          "statusCode",
+          "status_code",
+          "status_msg"
+        ],
+        "item_containers": {
+          "itemList": 8
+        },
+        "pagination": {
+          "cursor": {
+            "redacted": true,
+            "length": 1
+          },
+          "hasMore": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      "body_source": "response_sample"
+    }
+  },
+  {
+    "action": "explore_session",
+    "category_name": "mixed",
+    "request": {
+      "endpoint": "https://www.tiktok.com/api/explore/item_list/",
+      "method": "GET",
+      "query": {
+        "WebIdLastTime": {
+          "type": "string",
+          "length": 10
+        },
+        "X-Bogus": {
+          "redacted": true,
+          "length": 1
+        },
+        "X-Dynosaur": {
+          "redacted": true,
+          "length": 444
+        },
+        "X-Gnarly": {
+          "redacted": true,
+          "length": 332
+        },
+        "aid": {
+          "type": "string",
+          "length": 4
+        },
+        "app_language": {
+          "type": "string",
+          "length": 6
+        },
+        "app_name": {
+          "type": "string",
+          "length": 10
+        },
+        "browser_language": {
+          "type": "string",
+          "length": 2
+        },
+        "browser_name": {
+          "type": "string",
+          "length": 7
+        },
+        "browser_online": {
+          "type": "string",
+          "length": 4
+        },
+        "browser_platform": {
+          "type": "string",
+          "length": 5
+        },
+        "browser_version": {
+          "type": "string",
+          "length": 103
+        },
+        "categoryType": {
+          "type": "string",
+          "length": 3,
+          "value": "123"
+        },
+        "channel": {
+          "type": "string",
+          "length": 10
+        },
+        "clientABVersions": {
+          "type": "string",
+          "length": 431
+        },
+        "cookie_enabled": {
+          "redacted": true,
+          "length": 4
+        },
+        "count": {
+          "type": "string",
+          "length": 1
+        },
+        "data_collection_enabled": {
+          "type": "string",
+          "length": 4
+        },
+        "device_id": {
+          "type": "string",
+          "length": 19
+        },
+        "device_platform": {
+          "type": "string",
+          "length": 6
+        },
+        "enable_cache": {
+          "type": "string",
+          "length": 5
+        },
+        "focus_state": {
+          "type": "string",
+          "length": 4
+        },
+        "from_page": {
+          "type": "string",
+          "length": 0
+        },
+        "history_len": {
+          "type": "string",
+          "length": 1
+        },
+        "is_fullscreen": {
+          "type": "string",
+          "length": 5
+        },
+        "is_new_user": {
+          "type": "string",
+          "length": 5
+        },
+        "is_page_visible": {
+          "type": "string",
+          "length": 4
+        },
+        "language": {
+          "type": "string",
+          "length": 2
+        },
+        "msToken": {
+          "redacted": true,
+          "length": 160
+        },
+        "odinId": {
+          "type": "string",
+          "length": 19
+        },
+        "os": {
+          "type": "string",
+          "length": 7
+        },
+        "priority_region": {
+          "type": "string",
+          "length": 2
+        },
+        "pullType": {
+          "type": "string",
+          "length": 1,
+          "value": "2"
+        },
+        "referer": {
+          "type": "string",
+          "length": 0
+        },
+        "region": {
+          "type": "string",
+          "length": 2
+        },
+        "screen_height": {
+          "type": "string",
+          "length": 4
+        },
+        "screen_width": {
+          "type": "string",
+          "length": 4
+        },
+        "tz_name": {
+          "type": "string",
+          "length": 13
+        },
+        "user_is_login": {
+          "type": "string",
+          "length": 4
+        },
+        "verifyFp": {
+          "type": "string",
+          "length": 52
+        },
+        "video_encoding": {
+          "type": "string",
+          "length": 4
+        },
+        "webcast_language": {
+          "type": "string",
+          "length": 6
+        }
+      },
+      "headers": {
+        ":authority": {
+          "type": "string",
+          "length": 14
+        },
+        ":method": {
+          "type": "string",
+          "length": 3
+        },
+        ":path": {
+          "type": "string",
+          "length": 2414
+        },
+        ":scheme": {
+          "type": "string",
+          "length": 5
+        },
+        "accept": {
+          "type": "string",
+          "length": 3
+        },
+        "accept-encoding": {
+          "type": "string",
+          "length": 23
+        },
+        "accept-language": {
+          "type": "string",
+          "length": 60
+        },
+        "priority": {
+          "type": "string",
+          "length": 6
+        },
+        "referer": {
+          "type": "string",
+          "length": 30
+        },
+        "sec-ch-ua": {
+          "type": "string",
+          "length": 64
+        },
+        "sec-ch-ua-mobile": {
+          "type": "string",
+          "length": 2
+        },
+        "sec-ch-ua-platform": {
+          "type": "string",
+          "length": 9
+        },
+        "sec-fetch-dest": {
+          "type": "string",
+          "length": 5
+        },
+        "sec-fetch-mode": {
+          "type": "string",
+          "length": 4
+        },
+        "sec-fetch-site": {
+          "type": "string",
+          "length": 11
+        },
+        "user-agent": {
+          "type": "string",
+          "length": 111
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "access-control-expose-headers": {
+          "type": "string",
+          "length": 25
+        },
+        "bd-tt-error-code": {
+          "type": "string",
+          "length": 1
+        },
+        "cache-control": {
+          "type": "string",
+          "length": 29
+        },
+        "content-encoding": {
+          "type": "string",
+          "length": 2
+        },
+        "content-type": {
+          "type": "string",
+          "length": 31
+        },
+        "date": {
+          "type": "string",
+          "length": 29
+        },
+        "expires": {
+          "type": "string",
+          "length": 29
+        },
+        "pragma": {
+          "type": "string",
+          "length": 8
+        },
+        "server": {
+          "type": "string",
+          "length": 5
+        },
+        "server-timing": {
+          "type": "string",
+          "length": 14
+        },
+        "tt-ticket-guard-result": {
+          "type": "string",
+          "length": 1
+        },
+        "tt_stable": {
+          "type": "string",
+          "length": 1
+        },
+        "x-akamai-request-id": {
+          "type": "string",
+          "length": 17
+        },
+        "x-cache": {
+          "type": "string",
+          "length": 115
+        },
+        "x-cache-remote": {
+          "type": "string",
+          "length": 114
+        },
+        "x-ms-token": {
+          "redacted": true,
+          "length": 160
+        },
+        "x-origin-response-time": {
+          "type": "string",
+          "length": 15
+        },
+        "x-parent-response-time": {
+          "type": "string",
+          "length": 16
+        },
+        "x-tt-logid": {
+          "type": "string",
+          "length": 34
+        },
+        "x-tt-trace-host": {
+          "type": "string",
+          "length": 322
+        },
+        "x-tt-trace-id": {
+          "type": "string",
+          "length": 55
+        },
+        "x-tt-trace-tag": {
+          "type": "string",
+          "length": 29
+        }
+      },
+      "set_cookie_names": [],
+      "body": {
+        "root_type": "object",
+        "keys": [
+          "cursor",
+          "extra",
+          "hasMore",
+          "itemList",
+          "log_pb",
+          "statusCode",
+          "status_code",
+          "status_msg"
+        ],
+        "item_containers": {
+          "itemList": 8
+        },
+        "pagination": {
+          "cursor": {
+            "redacted": true,
+            "length": 1
+          },
+          "hasMore": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      "body_source": "response_sample"
+    }
+  },
+  {
+    "action": "explore_session",
+    "category_name": "mixed",
+    "request": {
+      "endpoint": "https://www.tiktok.com/api/explore/item_list/",
+      "method": "GET",
+      "query": {
+        "WebIdLastTime": {
+          "type": "string",
+          "length": 10
+        },
+        "X-Bogus": {
+          "redacted": true,
+          "length": 1
+        },
+        "X-Dynosaur": {
+          "redacted": true,
+          "length": 444
+        },
+        "X-Gnarly": {
+          "redacted": true,
+          "length": 332
+        },
+        "aid": {
+          "type": "string",
+          "length": 4
+        },
+        "app_language": {
+          "type": "string",
+          "length": 6
+        },
+        "app_name": {
+          "type": "string",
+          "length": 10
+        },
+        "browser_language": {
+          "type": "string",
+          "length": 2
+        },
+        "browser_name": {
+          "type": "string",
+          "length": 7
+        },
+        "browser_online": {
+          "type": "string",
+          "length": 4
+        },
+        "browser_platform": {
+          "type": "string",
+          "length": 5
+        },
+        "browser_version": {
+          "type": "string",
+          "length": 103
+        },
+        "categoryType": {
+          "type": "string",
+          "length": 3,
+          "value": "123"
+        },
+        "channel": {
+          "type": "string",
+          "length": 10
+        },
+        "clientABVersions": {
+          "type": "string",
+          "length": 431
+        },
+        "cookie_enabled": {
+          "redacted": true,
+          "length": 4
+        },
+        "count": {
+          "type": "string",
+          "length": 1
+        },
+        "data_collection_enabled": {
+          "type": "string",
+          "length": 4
+        },
+        "device_id": {
+          "type": "string",
+          "length": 19
+        },
+        "device_platform": {
+          "type": "string",
+          "length": 6
+        },
+        "enable_cache": {
+          "type": "string",
+          "length": 5
+        },
+        "focus_state": {
+          "type": "string",
+          "length": 4
+        },
+        "from_page": {
+          "type": "string",
+          "length": 0
+        },
+        "history_len": {
+          "type": "string",
+          "length": 1
+        },
+        "is_fullscreen": {
+          "type": "string",
+          "length": 5
+        },
+        "is_new_user": {
+          "type": "string",
+          "length": 5
+        },
+        "is_page_visible": {
+          "type": "string",
+          "length": 4
+        },
+        "language": {
+          "type": "string",
+          "length": 2
+        },
+        "msToken": {
+          "redacted": true,
+          "length": 160
+        },
+        "odinId": {
+          "type": "string",
+          "length": 19
+        },
+        "os": {
+          "type": "string",
+          "length": 7
+        },
+        "priority_region": {
+          "type": "string",
+          "length": 2
+        },
+        "pullType": {
+          "type": "string",
+          "length": 1,
+          "value": "2"
+        },
+        "referer": {
+          "type": "string",
+          "length": 0
+        },
+        "region": {
+          "type": "string",
+          "length": 2
+        },
+        "screen_height": {
+          "type": "string",
+          "length": 4
+        },
+        "screen_width": {
+          "type": "string",
+          "length": 4
+        },
+        "tz_name": {
+          "type": "string",
+          "length": 13
+        },
+        "user_is_login": {
+          "type": "string",
+          "length": 4
+        },
+        "verifyFp": {
+          "type": "string",
+          "length": 52
+        },
+        "video_encoding": {
+          "type": "string",
+          "length": 4
+        },
+        "webcast_language": {
+          "type": "string",
+          "length": 6
+        }
+      },
+      "headers": {
+        ":authority": {
+          "type": "string",
+          "length": 14
+        },
+        ":method": {
+          "type": "string",
+          "length": 3
+        },
+        ":path": {
+          "type": "string",
+          "length": 2414
+        },
+        ":scheme": {
+          "type": "string",
+          "length": 5
+        },
+        "accept": {
+          "type": "string",
+          "length": 3
+        },
+        "accept-encoding": {
+          "type": "string",
+          "length": 23
+        },
+        "accept-language": {
+          "type": "string",
+          "length": 60
+        },
+        "priority": {
+          "type": "string",
+          "length": 6
+        },
+        "referer": {
+          "type": "string",
+          "length": 30
+        },
+        "sec-ch-ua": {
+          "type": "string",
+          "length": 64
+        },
+        "sec-ch-ua-mobile": {
+          "type": "string",
+          "length": 2
+        },
+        "sec-ch-ua-platform": {
+          "type": "string",
+          "length": 9
+        },
+        "sec-fetch-dest": {
+          "type": "string",
+          "length": 5
+        },
+        "sec-fetch-mode": {
+          "type": "string",
+          "length": 4
+        },
+        "sec-fetch-site": {
+          "type": "string",
+          "length": 11
+        },
+        "user-agent": {
+          "type": "string",
+          "length": 111
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "access-control-expose-headers": {
+          "type": "string",
+          "length": 25
+        },
+        "bd-tt-error-code": {
+          "type": "string",
+          "length": 1
+        },
+        "cache-control": {
+          "type": "string",
+          "length": 29
+        },
+        "content-encoding": {
+          "type": "string",
+          "length": 2
+        },
+        "content-type": {
+          "type": "string",
+          "length": 31
+        },
+        "date": {
+          "type": "string",
+          "length": 29
+        },
+        "expires": {
+          "type": "string",
+          "length": 29
+        },
+        "pragma": {
+          "type": "string",
+          "length": 8
+        },
+        "server": {
+          "type": "string",
+          "length": 5
+        },
+        "server-timing": {
+          "type": "string",
+          "length": 14
+        },
+        "tt-ticket-guard-result": {
+          "type": "string",
+          "length": 1
+        },
+        "tt_stable": {
+          "type": "string",
+          "length": 1
+        },
+        "x-akamai-request-id": {
+          "type": "string",
+          "length": 17
+        },
+        "x-cache": {
+          "type": "string",
+          "length": 115
+        },
+        "x-cache-remote": {
+          "type": "string",
+          "length": 114
+        },
+        "x-ms-token": {
+          "redacted": true,
+          "length": 160
+        },
+        "x-origin-response-time": {
+          "type": "string",
+          "length": 15
+        },
+        "x-parent-response-time": {
+          "type": "string",
+          "length": 16
+        },
+        "x-tt-logid": {
+          "type": "string",
+          "length": 34
+        },
+        "x-tt-trace-host": {
+          "type": "string",
+          "length": 322
+        },
+        "x-tt-trace-id": {
+          "type": "string",
+          "length": 55
+        },
+        "x-tt-trace-tag": {
+          "type": "string",
+          "length": 29
+        }
+      },
+      "set_cookie_names": [],
+      "body": {
+        "root_type": "object",
+        "keys": [
+          "cursor",
+          "extra",
+          "hasMore",
+          "itemList",
+          "log_pb",
+          "statusCode",
+          "status_code",
+          "status_msg"
+        ],
+        "item_containers": {
+          "itemList": 8
+        },
+        "pagination": {
+          "cursor": {
+            "redacted": true,
+            "length": 1
+          },
+          "hasMore": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      "body_source": "response_sample"
+    }
+  },
+  {
+    "action": "explore_session",
+    "category_name": "mixed",
+    "request": {
+      "endpoint": "https://www.tiktok.com/api/explore/item_list/",
+      "method": "GET",
+      "query": {
+        "WebIdLastTime": {
+          "type": "string",
+          "length": 10
+        },
+        "X-Bogus": {
+          "redacted": true,
+          "length": 1
+        },
+        "X-Dynosaur": {
+          "redacted": true,
+          "length": 444
+        },
+        "X-Gnarly": {
+          "redacted": true,
+          "length": 332
+        },
+        "aid": {
+          "type": "string",
+          "length": 4
+        },
+        "app_language": {
+          "type": "string",
+          "length": 6
+        },
+        "app_name": {
+          "type": "string",
+          "length": 10
+        },
+        "browser_language": {
+          "type": "string",
+          "length": 2
+        },
+        "browser_name": {
+          "type": "string",
+          "length": 7
+        },
+        "browser_online": {
+          "type": "string",
+          "length": 4
+        },
+        "browser_platform": {
+          "type": "string",
+          "length": 5
+        },
+        "browser_version": {
+          "type": "string",
+          "length": 103
+        },
+        "categoryType": {
+          "type": "string",
+          "length": 3,
+          "value": "119"
+        },
+        "channel": {
+          "type": "string",
+          "length": 10
+        },
+        "clientABVersions": {
+          "type": "string",
+          "length": 431
+        },
+        "cookie_enabled": {
+          "redacted": true,
+          "length": 4
+        },
+        "count": {
+          "type": "string",
+          "length": 1
+        },
+        "data_collection_enabled": {
+          "type": "string",
+          "length": 4
+        },
+        "device_id": {
+          "type": "string",
+          "length": 19
+        },
+        "device_platform": {
+          "type": "string",
+          "length": 6
+        },
+        "enable_cache": {
+          "type": "string",
+          "length": 5
+        },
+        "focus_state": {
+          "type": "string",
+          "length": 4
+        },
+        "from_page": {
+          "type": "string",
+          "length": 0
+        },
+        "history_len": {
+          "type": "string",
+          "length": 1
+        },
+        "is_fullscreen": {
+          "type": "string",
+          "length": 5
+        },
+        "is_new_user": {
+          "type": "string",
+          "length": 5
+        },
+        "is_page_visible": {
+          "type": "string",
+          "length": 4
+        },
+        "language": {
+          "type": "string",
+          "length": 2
+        },
+        "msToken": {
+          "redacted": true,
+          "length": 160
+        },
+        "odinId": {
+          "type": "string",
+          "length": 19
+        },
+        "os": {
+          "type": "string",
+          "length": 7
+        },
+        "priority_region": {
+          "type": "string",
+          "length": 2
+        },
+        "pullType": {
+          "type": "string",
+          "length": 1,
+          "value": "2"
+        },
+        "referer": {
+          "type": "string",
+          "length": 0
+        },
+        "region": {
+          "type": "string",
+          "length": 2
+        },
+        "screen_height": {
+          "type": "string",
+          "length": 4
+        },
+        "screen_width": {
+          "type": "string",
+          "length": 4
+        },
+        "tz_name": {
+          "type": "string",
+          "length": 13
+        },
+        "user_is_login": {
+          "type": "string",
+          "length": 4
+        },
+        "verifyFp": {
+          "type": "string",
+          "length": 52
+        },
+        "video_encoding": {
+          "type": "string",
+          "length": 4
+        },
+        "webcast_language": {
+          "type": "string",
+          "length": 6
+        }
+      },
+      "headers": {
+        ":authority": {
+          "type": "string",
+          "length": 14
+        },
+        ":method": {
+          "type": "string",
+          "length": 3
+        },
+        ":path": {
+          "type": "string",
+          "length": 2414
+        },
+        ":scheme": {
+          "type": "string",
+          "length": 5
+        },
+        "accept": {
+          "type": "string",
+          "length": 3
+        },
+        "accept-encoding": {
+          "type": "string",
+          "length": 23
+        },
+        "accept-language": {
+          "type": "string",
+          "length": 60
+        },
+        "priority": {
+          "type": "string",
+          "length": 6
+        },
+        "referer": {
+          "type": "string",
+          "length": 30
+        },
+        "sec-ch-ua": {
+          "type": "string",
+          "length": 64
+        },
+        "sec-ch-ua-mobile": {
+          "type": "string",
+          "length": 2
+        },
+        "sec-ch-ua-platform": {
+          "type": "string",
+          "length": 9
+        },
+        "sec-fetch-dest": {
+          "type": "string",
+          "length": 5
+        },
+        "sec-fetch-mode": {
+          "type": "string",
+          "length": 4
+        },
+        "sec-fetch-site": {
+          "type": "string",
+          "length": 11
+        },
+        "user-agent": {
+          "type": "string",
+          "length": 111
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "access-control-expose-headers": {
+          "type": "string",
+          "length": 25
+        },
+        "bd-tt-error-code": {
+          "type": "string",
+          "length": 1
+        },
+        "cache-control": {
+          "type": "string",
+          "length": 29
+        },
+        "content-encoding": {
+          "type": "string",
+          "length": 2
+        },
+        "content-type": {
+          "type": "string",
+          "length": 31
+        },
+        "date": {
+          "type": "string",
+          "length": 29
+        },
+        "expires": {
+          "type": "string",
+          "length": 29
+        },
+        "pragma": {
+          "type": "string",
+          "length": 8
+        },
+        "server": {
+          "type": "string",
+          "length": 5
+        },
+        "server-timing": {
+          "type": "string",
+          "length": 14
+        },
+        "tt-ticket-guard-result": {
+          "type": "string",
+          "length": 1
+        },
+        "tt_stable": {
+          "type": "string",
+          "length": 1
+        },
+        "x-akamai-request-id": {
+          "type": "string",
+          "length": 17
+        },
+        "x-cache": {
+          "type": "string",
+          "length": 115
+        },
+        "x-cache-remote": {
+          "type": "string",
+          "length": 116
+        },
+        "x-ms-token": {
+          "redacted": true,
+          "length": 160
+        },
+        "x-origin-response-time": {
+          "type": "string",
+          "length": 17
+        },
+        "x-parent-response-time": {
+          "type": "string",
+          "length": 16
+        },
+        "x-tt-logid": {
+          "type": "string",
+          "length": 34
+        },
+        "x-tt-trace-host": {
+          "type": "string",
+          "length": 290
+        },
+        "x-tt-trace-id": {
+          "type": "string",
+          "length": 55
+        },
+        "x-tt-trace-tag": {
+          "type": "string",
+          "length": 29
+        }
+      },
+      "set_cookie_names": [],
+      "body": {
+        "root_type": "object",
+        "keys": [
+          "cursor",
+          "extra",
+          "hasMore",
+          "itemList",
+          "log_pb",
+          "statusCode",
+          "status_code",
+          "status_msg"
+        ],
+        "item_containers": {
+          "itemList": 8
+        },
+        "pagination": {
+          "cursor": {
+            "redacted": true,
+            "length": 1
+          },
+          "hasMore": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      "body_source": "response_sample"
+    }
+  },
+  {
+    "action": "explore_session",
+    "category_name": "mixed",
+    "request": {
+      "endpoint": "https://www.tiktok.com/api/explore/item_list/",
+      "method": "GET",
+      "query": {
+        "WebIdLastTime": {
+          "type": "string",
+          "length": 10
+        },
+        "X-Bogus": {
+          "redacted": true,
+          "length": 1
+        },
+        "X-Dynosaur": {
+          "redacted": true,
+          "length": 444
+        },
+        "X-Gnarly": {
+          "redacted": true,
+          "length": 332
+        },
+        "aid": {
+          "type": "string",
+          "length": 4
+        },
+        "app_language": {
+          "type": "string",
+          "length": 6
+        },
+        "app_name": {
+          "type": "string",
+          "length": 10
+        },
+        "browser_language": {
+          "type": "string",
+          "length": 2
+        },
+        "browser_name": {
+          "type": "string",
+          "length": 7
+        },
+        "browser_online": {
+          "type": "string",
+          "length": 4
+        },
+        "browser_platform": {
+          "type": "string",
+          "length": 5
+        },
+        "browser_version": {
+          "type": "string",
+          "length": 103
+        },
+        "categoryType": {
+          "type": "string",
+          "length": 3,
+          "value": "119"
+        },
+        "channel": {
+          "type": "string",
+          "length": 10
+        },
+        "clientABVersions": {
+          "type": "string",
+          "length": 431
+        },
+        "cookie_enabled": {
+          "redacted": true,
+          "length": 4
+        },
+        "count": {
+          "type": "string",
+          "length": 1
+        },
+        "data_collection_enabled": {
+          "type": "string",
+          "length": 4
+        },
+        "device_id": {
+          "type": "string",
+          "length": 19
+        },
+        "device_platform": {
+          "type": "string",
+          "length": 6
+        },
+        "enable_cache": {
+          "type": "string",
+          "length": 5
+        },
+        "focus_state": {
+          "type": "string",
+          "length": 4
+        },
+        "from_page": {
+          "type": "string",
+          "length": 0
+        },
+        "history_len": {
+          "type": "string",
+          "length": 1
+        },
+        "is_fullscreen": {
+          "type": "string",
+          "length": 5
+        },
+        "is_new_user": {
+          "type": "string",
+          "length": 5
+        },
+        "is_page_visible": {
+          "type": "string",
+          "length": 4
+        },
+        "language": {
+          "type": "string",
+          "length": 2
+        },
+        "msToken": {
+          "redacted": true,
+          "length": 160
+        },
+        "odinId": {
+          "type": "string",
+          "length": 19
+        },
+        "os": {
+          "type": "string",
+          "length": 7
+        },
+        "priority_region": {
+          "type": "string",
+          "length": 2
+        },
+        "pullType": {
+          "type": "string",
+          "length": 1,
+          "value": "2"
+        },
+        "referer": {
+          "type": "string",
+          "length": 0
+        },
+        "region": {
+          "type": "string",
+          "length": 2
+        },
+        "screen_height": {
+          "type": "string",
+          "length": 4
+        },
+        "screen_width": {
+          "type": "string",
+          "length": 4
+        },
+        "tz_name": {
+          "type": "string",
+          "length": 13
+        },
+        "user_is_login": {
+          "type": "string",
+          "length": 4
+        },
+        "verifyFp": {
+          "type": "string",
+          "length": 52
+        },
+        "video_encoding": {
+          "type": "string",
+          "length": 4
+        },
+        "webcast_language": {
+          "type": "string",
+          "length": 6
+        }
+      },
+      "headers": {
+        ":authority": {
+          "type": "string",
+          "length": 14
+        },
+        ":method": {
+          "type": "string",
+          "length": 3
+        },
+        ":path": {
+          "type": "string",
+          "length": 2414
+        },
+        ":scheme": {
+          "type": "string",
+          "length": 5
+        },
+        "accept": {
+          "type": "string",
+          "length": 3
+        },
+        "accept-encoding": {
+          "type": "string",
+          "length": 23
+        },
+        "accept-language": {
+          "type": "string",
+          "length": 60
+        },
+        "priority": {
+          "type": "string",
+          "length": 6
+        },
+        "referer": {
+          "type": "string",
+          "length": 30
+        },
+        "sec-ch-ua": {
+          "type": "string",
+          "length": 64
+        },
+        "sec-ch-ua-mobile": {
+          "type": "string",
+          "length": 2
+        },
+        "sec-ch-ua-platform": {
+          "type": "string",
+          "length": 9
+        },
+        "sec-fetch-dest": {
+          "type": "string",
+          "length": 5
+        },
+        "sec-fetch-mode": {
+          "type": "string",
+          "length": 4
+        },
+        "sec-fetch-site": {
+          "type": "string",
+          "length": 11
+        },
+        "user-agent": {
+          "type": "string",
+          "length": 111
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "access-control-expose-headers": {
+          "type": "string",
+          "length": 25
+        },
+        "bd-tt-error-code": {
+          "type": "string",
+          "length": 1
+        },
+        "cache-control": {
+          "type": "string",
+          "length": 29
+        },
+        "content-encoding": {
+          "type": "string",
+          "length": 2
+        },
+        "content-type": {
+          "type": "string",
+          "length": 31
+        },
+        "date": {
+          "type": "string",
+          "length": 29
+        },
+        "expires": {
+          "type": "string",
+          "length": 29
+        },
+        "pragma": {
+          "type": "string",
+          "length": 8
+        },
+        "server": {
+          "type": "string",
+          "length": 5
+        },
+        "server-timing": {
+          "type": "string",
+          "length": 14
+        },
+        "tt-ticket-guard-result": {
+          "type": "string",
+          "length": 1
+        },
+        "tt_stable": {
+          "type": "string",
+          "length": 1
+        },
+        "x-akamai-request-id": {
+          "type": "string",
+          "length": 17
+        },
+        "x-cache": {
+          "type": "string",
+          "length": 115
+        },
+        "x-cache-remote": {
+          "type": "string",
+          "length": 116
+        },
+        "x-ms-token": {
+          "redacted": true,
+          "length": 160
+        },
+        "x-origin-response-time": {
+          "type": "string",
+          "length": 17
+        },
+        "x-parent-response-time": {
+          "type": "string",
+          "length": 16
+        },
+        "x-tt-logid": {
+          "type": "string",
+          "length": 34
+        },
+        "x-tt-trace-host": {
+          "type": "string",
+          "length": 290
+        },
+        "x-tt-trace-id": {
+          "type": "string",
+          "length": 55
+        },
+        "x-tt-trace-tag": {
+          "type": "string",
+          "length": 29
+        }
+      },
+      "set_cookie_names": [],
+      "body": {
+        "root_type": "object",
+        "keys": [
+          "cursor",
+          "extra",
+          "hasMore",
+          "itemList",
+          "log_pb",
+          "statusCode",
+          "status_code",
+          "status_msg"
+        ],
+        "item_containers": {
+          "itemList": 8
+        },
+        "pagination": {
+          "cursor": {
+            "redacted": true,
+            "length": 1
+          },
+          "hasMore": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      "body_source": "response_sample"
+    }
+  },
+  {
+    "action": "explore_session",
+    "category_name": "mixed",
+    "request": {
+      "endpoint": "https://www.tiktok.com/api/explore/item_list/",
+      "method": "GET",
+      "query": {
+        "WebIdLastTime": {
+          "type": "string",
+          "length": 10
+        },
+        "X-Bogus": {
+          "redacted": true,
+          "length": 1
+        },
+        "X-Dynosaur": {
+          "redacted": true,
+          "length": 444
+        },
+        "X-Gnarly": {
+          "redacted": true,
+          "length": 332
+        },
+        "aid": {
+          "type": "string",
+          "length": 4
+        },
+        "app_language": {
+          "type": "string",
+          "length": 6
+        },
+        "app_name": {
+          "type": "string",
+          "length": 10
+        },
+        "browser_language": {
+          "type": "string",
+          "length": 2
+        },
+        "browser_name": {
+          "type": "string",
+          "length": 7
+        },
+        "browser_online": {
+          "type": "string",
+          "length": 4
+        },
+        "browser_platform": {
+          "type": "string",
+          "length": 5
+        },
+        "browser_version": {
+          "type": "string",
+          "length": 103
+        },
+        "categoryType": {
+          "type": "string",
+          "length": 3,
+          "value": "119"
+        },
+        "channel": {
+          "type": "string",
+          "length": 10
+        },
+        "clientABVersions": {
+          "type": "string",
+          "length": 431
+        },
+        "cookie_enabled": {
+          "redacted": true,
+          "length": 4
+        },
+        "count": {
+          "type": "string",
+          "length": 1
+        },
+        "data_collection_enabled": {
+          "type": "string",
+          "length": 4
+        },
+        "device_id": {
+          "type": "string",
+          "length": 19
+        },
+        "device_platform": {
+          "type": "string",
+          "length": 6
+        },
+        "enable_cache": {
+          "type": "string",
+          "length": 5
+        },
+        "focus_state": {
+          "type": "string",
+          "length": 4
+        },
+        "from_page": {
+          "type": "string",
+          "length": 0
+        },
+        "history_len": {
+          "type": "string",
+          "length": 1
+        },
+        "is_fullscreen": {
+          "type": "string",
+          "length": 5
+        },
+        "is_new_user": {
+          "type": "string",
+          "length": 5
+        },
+        "is_page_visible": {
+          "type": "string",
+          "length": 4
+        },
+        "language": {
+          "type": "string",
+          "length": 2
+        },
+        "msToken": {
+          "redacted": true,
+          "length": 160
+        },
+        "odinId": {
+          "type": "string",
+          "length": 19
+        },
+        "os": {
+          "type": "string",
+          "length": 7
+        },
+        "priority_region": {
+          "type": "string",
+          "length": 2
+        },
+        "pullType": {
+          "type": "string",
+          "length": 1,
+          "value": "2"
+        },
+        "referer": {
+          "type": "string",
+          "length": 0
+        },
+        "region": {
+          "type": "string",
+          "length": 2
+        },
+        "screen_height": {
+          "type": "string",
+          "length": 4
+        },
+        "screen_width": {
+          "type": "string",
+          "length": 4
+        },
+        "tz_name": {
+          "type": "string",
+          "length": 13
+        },
+        "user_is_login": {
+          "type": "string",
+          "length": 4
+        },
+        "verifyFp": {
+          "type": "string",
+          "length": 52
+        },
+        "video_encoding": {
+          "type": "string",
+          "length": 4
+        },
+        "webcast_language": {
+          "type": "string",
+          "length": 6
+        }
+      },
+      "headers": {
+        ":authority": {
+          "type": "string",
+          "length": 14
+        },
+        ":method": {
+          "type": "string",
+          "length": 3
+        },
+        ":path": {
+          "type": "string",
+          "length": 2414
+        },
+        ":scheme": {
+          "type": "string",
+          "length": 5
+        },
+        "accept": {
+          "type": "string",
+          "length": 3
+        },
+        "accept-encoding": {
+          "type": "string",
+          "length": 23
+        },
+        "accept-language": {
+          "type": "string",
+          "length": 60
+        },
+        "priority": {
+          "type": "string",
+          "length": 6
+        },
+        "referer": {
+          "type": "string",
+          "length": 30
+        },
+        "sec-ch-ua": {
+          "type": "string",
+          "length": 64
+        },
+        "sec-ch-ua-mobile": {
+          "type": "string",
+          "length": 2
+        },
+        "sec-ch-ua-platform": {
+          "type": "string",
+          "length": 9
+        },
+        "sec-fetch-dest": {
+          "type": "string",
+          "length": 5
+        },
+        "sec-fetch-mode": {
+          "type": "string",
+          "length": 4
+        },
+        "sec-fetch-site": {
+          "type": "string",
+          "length": 11
+        },
+        "user-agent": {
+          "type": "string",
+          "length": 111
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "access-control-expose-headers": {
+          "type": "string",
+          "length": 25
+        },
+        "bd-tt-error-code": {
+          "type": "string",
+          "length": 1
+        },
+        "cache-control": {
+          "type": "string",
+          "length": 29
+        },
+        "content-encoding": {
+          "type": "string",
+          "length": 2
+        },
+        "content-type": {
+          "type": "string",
+          "length": 31
+        },
+        "date": {
+          "type": "string",
+          "length": 29
+        },
+        "expires": {
+          "type": "string",
+          "length": 29
+        },
+        "pragma": {
+          "type": "string",
+          "length": 8
+        },
+        "server": {
+          "type": "string",
+          "length": 5
+        },
+        "server-timing": {
+          "type": "string",
+          "length": 14
+        },
+        "tt-ticket-guard-result": {
+          "type": "string",
+          "length": 1
+        },
+        "tt_stable": {
+          "type": "string",
+          "length": 1
+        },
+        "x-akamai-request-id": {
+          "type": "string",
+          "length": 17
+        },
+        "x-cache": {
+          "type": "string",
+          "length": 115
+        },
+        "x-cache-remote": {
+          "type": "string",
+          "length": 114
+        },
+        "x-ms-token": {
+          "redacted": true,
+          "length": 160
+        },
+        "x-origin-response-time": {
+          "type": "string",
+          "length": 15
+        },
+        "x-parent-response-time": {
+          "type": "string",
+          "length": 16
+        },
+        "x-tt-logid": {
+          "type": "string",
+          "length": 34
+        },
+        "x-tt-trace-host": {
+          "type": "string",
+          "length": 322
+        },
+        "x-tt-trace-id": {
+          "type": "string",
+          "length": 55
+        },
+        "x-tt-trace-tag": {
+          "type": "string",
+          "length": 29
+        }
+      },
+      "set_cookie_names": [],
+      "body": {
+        "root_type": "object",
+        "keys": [
+          "cursor",
+          "extra",
+          "hasMore",
+          "itemList",
+          "log_pb",
+          "statusCode",
+          "status_code",
+          "status_msg"
+        ],
+        "item_containers": {
+          "itemList": 8
+        },
+        "pagination": {
+          "cursor": {
+            "redacted": true,
+            "length": 1
+          },
+          "hasMore": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      "body_source": "response_sample"
+    }
+  },
+  {
+    "action": "explore_session",
+    "category_name": "mixed",
+    "request": {
+      "endpoint": "https://www.tiktok.com/api/explore/item_list/",
+      "method": "GET",
+      "query": {
+        "WebIdLastTime": {
+          "type": "string",
+          "length": 10
+        },
+        "X-Bogus": {
+          "redacted": true,
+          "length": 1
+        },
+        "X-Dynosaur": {
+          "redacted": true,
+          "length": 444
+        },
+        "X-Gnarly": {
+          "redacted": true,
+          "length": 332
+        },
+        "aid": {
+          "type": "string",
+          "length": 4
+        },
+        "app_language": {
+          "type": "string",
+          "length": 6
+        },
+        "app_name": {
+          "type": "string",
+          "length": 10
+        },
+        "browser_language": {
+          "type": "string",
+          "length": 2
+        },
+        "browser_name": {
+          "type": "string",
+          "length": 7
+        },
+        "browser_online": {
+          "type": "string",
+          "length": 4
+        },
+        "browser_platform": {
+          "type": "string",
+          "length": 5
+        },
+        "browser_version": {
+          "type": "string",
+          "length": 103
+        },
+        "categoryType": {
+          "type": "string",
+          "length": 3,
+          "value": "119"
+        },
+        "channel": {
+          "type": "string",
+          "length": 10
+        },
+        "clientABVersions": {
+          "type": "string",
+          "length": 431
+        },
+        "cookie_enabled": {
+          "redacted": true,
+          "length": 4
+        },
+        "count": {
+          "type": "string",
+          "length": 1
+        },
+        "data_collection_enabled": {
+          "type": "string",
+          "length": 4
+        },
+        "device_id": {
+          "type": "string",
+          "length": 19
+        },
+        "device_platform": {
+          "type": "string",
+          "length": 6
+        },
+        "enable_cache": {
+          "type": "string",
+          "length": 5
+        },
+        "focus_state": {
+          "type": "string",
+          "length": 4
+        },
+        "from_page": {
+          "type": "string",
+          "length": 0
+        },
+        "history_len": {
+          "type": "string",
+          "length": 1
+        },
+        "is_fullscreen": {
+          "type": "string",
+          "length": 5
+        },
+        "is_new_user": {
+          "type": "string",
+          "length": 5
+        },
+        "is_page_visible": {
+          "type": "string",
+          "length": 4
+        },
+        "language": {
+          "type": "string",
+          "length": 2
+        },
+        "msToken": {
+          "redacted": true,
+          "length": 160
+        },
+        "odinId": {
+          "type": "string",
+          "length": 19
+        },
+        "os": {
+          "type": "string",
+          "length": 7
+        },
+        "priority_region": {
+          "type": "string",
+          "length": 2
+        },
+        "pullType": {
+          "type": "string",
+          "length": 1,
+          "value": "2"
+        },
+        "referer": {
+          "type": "string",
+          "length": 0
+        },
+        "region": {
+          "type": "string",
+          "length": 2
+        },
+        "screen_height": {
+          "type": "string",
+          "length": 4
+        },
+        "screen_width": {
+          "type": "string",
+          "length": 4
+        },
+        "tz_name": {
+          "type": "string",
+          "length": 13
+        },
+        "user_is_login": {
+          "type": "string",
+          "length": 4
+        },
+        "verifyFp": {
+          "type": "string",
+          "length": 52
+        },
+        "video_encoding": {
+          "type": "string",
+          "length": 4
+        },
+        "webcast_language": {
+          "type": "string",
+          "length": 6
+        }
+      },
+      "headers": {
+        ":authority": {
+          "type": "string",
+          "length": 14
+        },
+        ":method": {
+          "type": "string",
+          "length": 3
+        },
+        ":path": {
+          "type": "string",
+          "length": 2414
+        },
+        ":scheme": {
+          "type": "string",
+          "length": 5
+        },
+        "accept": {
+          "type": "string",
+          "length": 3
+        },
+        "accept-encoding": {
+          "type": "string",
+          "length": 23
+        },
+        "accept-language": {
+          "type": "string",
+          "length": 60
+        },
+        "priority": {
+          "type": "string",
+          "length": 6
+        },
+        "referer": {
+          "type": "string",
+          "length": 30
+        },
+        "sec-ch-ua": {
+          "type": "string",
+          "length": 64
+        },
+        "sec-ch-ua-mobile": {
+          "type": "string",
+          "length": 2
+        },
+        "sec-ch-ua-platform": {
+          "type": "string",
+          "length": 9
+        },
+        "sec-fetch-dest": {
+          "type": "string",
+          "length": 5
+        },
+        "sec-fetch-mode": {
+          "type": "string",
+          "length": 4
+        },
+        "sec-fetch-site": {
+          "type": "string",
+          "length": 11
+        },
+        "user-agent": {
+          "type": "string",
+          "length": 111
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "access-control-expose-headers": {
+          "type": "string",
+          "length": 25
+        },
+        "bd-tt-error-code": {
+          "type": "string",
+          "length": 1
+        },
+        "cache-control": {
+          "type": "string",
+          "length": 29
+        },
+        "content-encoding": {
+          "type": "string",
+          "length": 2
+        },
+        "content-type": {
+          "type": "string",
+          "length": 31
+        },
+        "date": {
+          "type": "string",
+          "length": 29
+        },
+        "expires": {
+          "type": "string",
+          "length": 29
+        },
+        "pragma": {
+          "type": "string",
+          "length": 8
+        },
+        "server": {
+          "type": "string",
+          "length": 5
+        },
+        "server-timing": {
+          "type": "string",
+          "length": 14
+        },
+        "tt-ticket-guard-result": {
+          "type": "string",
+          "length": 1
+        },
+        "tt_stable": {
+          "type": "string",
+          "length": 1
+        },
+        "x-akamai-request-id": {
+          "type": "string",
+          "length": 17
+        },
+        "x-cache": {
+          "type": "string",
+          "length": 115
+        },
+        "x-cache-remote": {
+          "type": "string",
+          "length": 115
+        },
+        "x-ms-token": {
+          "redacted": true,
+          "length": 160
+        },
+        "x-origin-response-time": {
+          "type": "string",
+          "length": 16
+        },
+        "x-parent-response-time": {
+          "type": "string",
+          "length": 16
+        },
+        "x-tt-logid": {
+          "type": "string",
+          "length": 34
+        },
+        "x-tt-trace-host": {
+          "type": "string",
+          "length": 290
+        },
+        "x-tt-trace-id": {
+          "type": "string",
+          "length": 55
+        },
+        "x-tt-trace-tag": {
+          "type": "string",
+          "length": 29
+        }
+      },
+      "set_cookie_names": [],
+      "body": {
+        "root_type": "object",
+        "keys": [
+          "cursor",
+          "extra",
+          "hasMore",
+          "itemList",
+          "log_pb",
+          "statusCode",
+          "status_code",
+          "status_msg"
+        ],
+        "item_containers": {
+          "itemList": 8
+        },
+        "pagination": {
+          "cursor": {
+            "redacted": true,
+            "length": 1
+          },
+          "hasMore": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      "body_source": "response_sample"
+    }
+  },
+  {
+    "action": "explore_session",
+    "category_name": "mixed",
+    "request": {
+      "endpoint": "https://www.tiktok.com/api/explore/item_list/",
+      "method": "GET",
+      "query": {
+        "WebIdLastTime": {
+          "type": "string",
+          "length": 10
+        },
+        "X-Bogus": {
+          "redacted": true,
+          "length": 1
+        },
+        "X-Dynosaur": {
+          "redacted": true,
+          "length": 444
+        },
+        "X-Gnarly": {
+          "redacted": true,
+          "length": 332
+        },
+        "aid": {
+          "type": "string",
+          "length": 4
+        },
+        "app_language": {
+          "type": "string",
+          "length": 6
+        },
+        "app_name": {
+          "type": "string",
+          "length": 10
+        },
+        "browser_language": {
+          "type": "string",
+          "length": 2
+        },
+        "browser_name": {
+          "type": "string",
+          "length": 7
+        },
+        "browser_online": {
+          "type": "string",
+          "length": 4
+        },
+        "browser_platform": {
+          "type": "string",
+          "length": 5
+        },
+        "browser_version": {
+          "type": "string",
+          "length": 103
+        },
+        "categoryType": {
+          "type": "string",
+          "length": 3,
+          "value": "119"
+        },
+        "channel": {
+          "type": "string",
+          "length": 10
+        },
+        "clientABVersions": {
+          "type": "string",
+          "length": 431
+        },
+        "cookie_enabled": {
+          "redacted": true,
+          "length": 4
+        },
+        "count": {
+          "type": "string",
+          "length": 1
+        },
+        "data_collection_enabled": {
+          "type": "string",
+          "length": 4
+        },
+        "device_id": {
+          "type": "string",
+          "length": 19
+        },
+        "device_platform": {
+          "type": "string",
+          "length": 6
+        },
+        "enable_cache": {
+          "type": "string",
+          "length": 5
+        },
+        "focus_state": {
+          "type": "string",
+          "length": 4
+        },
+        "from_page": {
+          "type": "string",
+          "length": 0
+        },
+        "history_len": {
+          "type": "string",
+          "length": 1
+        },
+        "is_fullscreen": {
+          "type": "string",
+          "length": 5
+        },
+        "is_new_user": {
+          "type": "string",
+          "length": 5
+        },
+        "is_page_visible": {
+          "type": "string",
+          "length": 4
+        },
+        "language": {
+          "type": "string",
+          "length": 2
+        },
+        "msToken": {
+          "redacted": true,
+          "length": 160
+        },
+        "odinId": {
+          "type": "string",
+          "length": 19
+        },
+        "os": {
+          "type": "string",
+          "length": 7
+        },
+        "priority_region": {
+          "type": "string",
+          "length": 2
+        },
+        "pullType": {
+          "type": "string",
+          "length": 1,
+          "value": "2"
+        },
+        "referer": {
+          "type": "string",
+          "length": 0
+        },
+        "region": {
+          "type": "string",
+          "length": 2
+        },
+        "screen_height": {
+          "type": "string",
+          "length": 4
+        },
+        "screen_width": {
+          "type": "string",
+          "length": 4
+        },
+        "tz_name": {
+          "type": "string",
+          "length": 13
+        },
+        "user_is_login": {
+          "type": "string",
+          "length": 4
+        },
+        "verifyFp": {
+          "type": "string",
+          "length": 52
+        },
+        "video_encoding": {
+          "type": "string",
+          "length": 4
+        },
+        "webcast_language": {
+          "type": "string",
+          "length": 6
+        }
+      },
+      "headers": {
+        ":authority": {
+          "type": "string",
+          "length": 14
+        },
+        ":method": {
+          "type": "string",
+          "length": 3
+        },
+        ":path": {
+          "type": "string",
+          "length": 2414
+        },
+        ":scheme": {
+          "type": "string",
+          "length": 5
+        },
+        "accept": {
+          "type": "string",
+          "length": 3
+        },
+        "accept-encoding": {
+          "type": "string",
+          "length": 23
+        },
+        "accept-language": {
+          "type": "string",
+          "length": 60
+        },
+        "priority": {
+          "type": "string",
+          "length": 6
+        },
+        "referer": {
+          "type": "string",
+          "length": 30
+        },
+        "sec-ch-ua": {
+          "type": "string",
+          "length": 64
+        },
+        "sec-ch-ua-mobile": {
+          "type": "string",
+          "length": 2
+        },
+        "sec-ch-ua-platform": {
+          "type": "string",
+          "length": 9
+        },
+        "sec-fetch-dest": {
+          "type": "string",
+          "length": 5
+        },
+        "sec-fetch-mode": {
+          "type": "string",
+          "length": 4
+        },
+        "sec-fetch-site": {
+          "type": "string",
+          "length": 11
+        },
+        "user-agent": {
+          "type": "string",
+          "length": 111
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "access-control-expose-headers": {
+          "type": "string",
+          "length": 25
+        },
+        "bd-tt-error-code": {
+          "type": "string",
+          "length": 1
+        },
+        "cache-control": {
+          "type": "string",
+          "length": 29
+        },
+        "content-encoding": {
+          "type": "string",
+          "length": 2
+        },
+        "content-type": {
+          "type": "string",
+          "length": 31
+        },
+        "date": {
+          "type": "string",
+          "length": 29
+        },
+        "expires": {
+          "type": "string",
+          "length": 29
+        },
+        "pragma": {
+          "type": "string",
+          "length": 8
+        },
+        "server": {
+          "type": "string",
+          "length": 5
+        },
+        "server-timing": {
+          "type": "string",
+          "length": 14
+        },
+        "tt-ticket-guard-result": {
+          "type": "string",
+          "length": 1
+        },
+        "tt_stable": {
+          "type": "string",
+          "length": 1
+        },
+        "x-akamai-request-id": {
+          "type": "string",
+          "length": 17
+        },
+        "x-cache": {
+          "type": "string",
+          "length": 115
+        },
+        "x-cache-remote": {
+          "type": "string",
+          "length": 116
+        },
+        "x-ms-token": {
+          "redacted": true,
+          "length": 160
+        },
+        "x-origin-response-time": {
+          "type": "string",
+          "length": 17
+        },
+        "x-parent-response-time": {
+          "type": "string",
+          "length": 16
+        },
+        "x-tt-logid": {
+          "type": "string",
+          "length": 34
+        },
+        "x-tt-trace-host": {
+          "type": "string",
+          "length": 322
+        },
+        "x-tt-trace-id": {
+          "type": "string",
+          "length": 55
+        },
+        "x-tt-trace-tag": {
+          "type": "string",
+          "length": 29
+        }
+      },
+      "set_cookie_names": [],
+      "body": {
+        "root_type": "object",
+        "keys": [
+          "cursor",
+          "extra",
+          "hasMore",
+          "itemList",
+          "log_pb",
+          "statusCode",
+          "status_code",
+          "status_msg"
+        ],
+        "item_containers": {
+          "itemList": 8
+        },
+        "pagination": {
+          "cursor": {
+            "redacted": true,
+            "length": 1
+          },
+          "hasMore": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      "body_source": "response_sample"
+    }
+  },
+  {
+    "action": "explore_session",
+    "category_name": "mixed",
+    "request": {
+      "endpoint": "https://www.tiktok.com/api/explore/item_list/",
+      "method": "GET",
+      "query": {
+        "WebIdLastTime": {
+          "type": "string",
+          "length": 10
+        },
+        "X-Bogus": {
+          "redacted": true,
+          "length": 1
+        },
+        "X-Dynosaur": {
+          "redacted": true,
+          "length": 444
+        },
+        "X-Gnarly": {
+          "redacted": true,
+          "length": 332
+        },
+        "aid": {
+          "type": "string",
+          "length": 4
+        },
+        "app_language": {
+          "type": "string",
+          "length": 6
+        },
+        "app_name": {
+          "type": "string",
+          "length": 10
+        },
+        "browser_language": {
+          "type": "string",
+          "length": 2
+        },
+        "browser_name": {
+          "type": "string",
+          "length": 7
+        },
+        "browser_online": {
+          "type": "string",
+          "length": 4
+        },
+        "browser_platform": {
+          "type": "string",
+          "length": 5
+        },
+        "browser_version": {
+          "type": "string",
+          "length": 103
+        },
+        "categoryType": {
+          "type": "string",
+          "length": 3,
+          "value": "119"
+        },
+        "channel": {
+          "type": "string",
+          "length": 10
+        },
+        "clientABVersions": {
+          "type": "string",
+          "length": 431
+        },
+        "cookie_enabled": {
+          "redacted": true,
+          "length": 4
+        },
+        "count": {
+          "type": "string",
+          "length": 1
+        },
+        "data_collection_enabled": {
+          "type": "string",
+          "length": 4
+        },
+        "device_id": {
+          "type": "string",
+          "length": 19
+        },
+        "device_platform": {
+          "type": "string",
+          "length": 6
+        },
+        "enable_cache": {
+          "type": "string",
+          "length": 5
+        },
+        "focus_state": {
+          "type": "string",
+          "length": 4
+        },
+        "from_page": {
+          "type": "string",
+          "length": 0
+        },
+        "history_len": {
+          "type": "string",
+          "length": 1
+        },
+        "is_fullscreen": {
+          "type": "string",
+          "length": 5
+        },
+        "is_new_user": {
+          "type": "string",
+          "length": 5
+        },
+        "is_page_visible": {
+          "type": "string",
+          "length": 4
+        },
+        "language": {
+          "type": "string",
+          "length": 2
+        },
+        "msToken": {
+          "redacted": true,
+          "length": 160
+        },
+        "odinId": {
+          "type": "string",
+          "length": 19
+        },
+        "os": {
+          "type": "string",
+          "length": 7
+        },
+        "priority_region": {
+          "type": "string",
+          "length": 2
+        },
+        "pullType": {
+          "type": "string",
+          "length": 1,
+          "value": "2"
+        },
+        "referer": {
+          "type": "string",
+          "length": 0
+        },
+        "region": {
+          "type": "string",
+          "length": 2
+        },
+        "screen_height": {
+          "type": "string",
+          "length": 4
+        },
+        "screen_width": {
+          "type": "string",
+          "length": 4
+        },
+        "tz_name": {
+          "type": "string",
+          "length": 13
+        },
+        "user_is_login": {
+          "type": "string",
+          "length": 4
+        },
+        "verifyFp": {
+          "type": "string",
+          "length": 52
+        },
+        "video_encoding": {
+          "type": "string",
+          "length": 4
+        },
+        "webcast_language": {
+          "type": "string",
+          "length": 6
+        }
+      },
+      "headers": {
+        ":authority": {
+          "type": "string",
+          "length": 14
+        },
+        ":method": {
+          "type": "string",
+          "length": 3
+        },
+        ":path": {
+          "type": "string",
+          "length": 2414
+        },
+        ":scheme": {
+          "type": "string",
+          "length": 5
+        },
+        "accept": {
+          "type": "string",
+          "length": 3
+        },
+        "accept-encoding": {
+          "type": "string",
+          "length": 23
+        },
+        "accept-language": {
+          "type": "string",
+          "length": 60
+        },
+        "priority": {
+          "type": "string",
+          "length": 6
+        },
+        "referer": {
+          "type": "string",
+          "length": 30
+        },
+        "sec-ch-ua": {
+          "type": "string",
+          "length": 64
+        },
+        "sec-ch-ua-mobile": {
+          "type": "string",
+          "length": 2
+        },
+        "sec-ch-ua-platform": {
+          "type": "string",
+          "length": 9
+        },
+        "sec-fetch-dest": {
+          "type": "string",
+          "length": 5
+        },
+        "sec-fetch-mode": {
+          "type": "string",
+          "length": 4
+        },
+        "sec-fetch-site": {
+          "type": "string",
+          "length": 11
+        },
+        "user-agent": {
+          "type": "string",
+          "length": 111
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "access-control-expose-headers": {
+          "type": "string",
+          "length": 25
+        },
+        "bd-tt-error-code": {
+          "type": "string",
+          "length": 1
+        },
+        "cache-control": {
+          "type": "string",
+          "length": 29
+        },
+        "content-encoding": {
+          "type": "string",
+          "length": 2
+        },
+        "content-type": {
+          "type": "string",
+          "length": 31
+        },
+        "date": {
+          "type": "string",
+          "length": 29
+        },
+        "expires": {
+          "type": "string",
+          "length": 29
+        },
+        "pragma": {
+          "type": "string",
+          "length": 8
+        },
+        "server": {
+          "type": "string",
+          "length": 5
+        },
+        "server-timing": {
+          "type": "string",
+          "length": 14
+        },
+        "tt-ticket-guard-result": {
+          "type": "string",
+          "length": 1
+        },
+        "tt_stable": {
+          "type": "string",
+          "length": 1
+        },
+        "x-akamai-request-id": {
+          "type": "string",
+          "length": 17
+        },
+        "x-cache": {
+          "type": "string",
+          "length": 115
+        },
+        "x-cache-remote": {
+          "type": "string",
+          "length": 116
+        },
+        "x-ms-token": {
+          "redacted": true,
+          "length": 160
+        },
+        "x-origin-response-time": {
+          "type": "string",
+          "length": 17
+        },
+        "x-parent-response-time": {
+          "type": "string",
+          "length": 16
+        },
+        "x-tt-logid": {
+          "type": "string",
+          "length": 34
+        },
+        "x-tt-trace-host": {
+          "type": "string",
+          "length": 322
+        },
+        "x-tt-trace-id": {
+          "type": "string",
+          "length": 55
+        },
+        "x-tt-trace-tag": {
+          "type": "string",
+          "length": 29
+        }
+      },
+      "set_cookie_names": [],
+      "body": {
+        "root_type": "object",
+        "keys": [
+          "cursor",
+          "extra",
+          "hasMore",
+          "itemList",
+          "log_pb",
+          "statusCode",
+          "status_code",
+          "status_msg"
+        ],
+        "item_containers": {
+          "itemList": 8
+        },
+        "pagination": {
+          "cursor": {
+            "redacted": true,
+            "length": 1
+          },
+          "hasMore": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      "body_source": "response_sample"
+    }
+  },
+  {
+    "action": "explore_session",
+    "category_name": "mixed",
+    "request": {
+      "endpoint": "https://www.tiktok.com/api/explore/item_list/",
+      "method": "GET",
+      "query": {
+        "WebIdLastTime": {
+          "type": "string",
+          "length": 10
+        },
+        "X-Bogus": {
+          "redacted": true,
+          "length": 1
+        },
+        "X-Dynosaur": {
+          "redacted": true,
+          "length": 444
+        },
+        "X-Gnarly": {
+          "redacted": true,
+          "length": 332
+        },
+        "aid": {
+          "type": "string",
+          "length": 4
+        },
+        "app_language": {
+          "type": "string",
+          "length": 6
+        },
+        "app_name": {
+          "type": "string",
+          "length": 10
+        },
+        "browser_language": {
+          "type": "string",
+          "length": 2
+        },
+        "browser_name": {
+          "type": "string",
+          "length": 7
+        },
+        "browser_online": {
+          "type": "string",
+          "length": 4
+        },
+        "browser_platform": {
+          "type": "string",
+          "length": 5
+        },
+        "browser_version": {
+          "type": "string",
+          "length": 103
+        },
+        "categoryType": {
+          "type": "string",
+          "length": 3,
+          "value": "119"
+        },
+        "channel": {
+          "type": "string",
+          "length": 10
+        },
+        "clientABVersions": {
+          "type": "string",
+          "length": 431
+        },
+        "cookie_enabled": {
+          "redacted": true,
+          "length": 4
+        },
+        "count": {
+          "type": "string",
+          "length": 1
+        },
+        "data_collection_enabled": {
+          "type": "string",
+          "length": 4
+        },
+        "device_id": {
+          "type": "string",
+          "length": 19
+        },
+        "device_platform": {
+          "type": "string",
+          "length": 6
+        },
+        "enable_cache": {
+          "type": "string",
+          "length": 5
+        },
+        "focus_state": {
+          "type": "string",
+          "length": 4
+        },
+        "from_page": {
+          "type": "string",
+          "length": 0
+        },
+        "history_len": {
+          "type": "string",
+          "length": 1
+        },
+        "is_fullscreen": {
+          "type": "string",
+          "length": 5
+        },
+        "is_new_user": {
+          "type": "string",
+          "length": 5
+        },
+        "is_page_visible": {
+          "type": "string",
+          "length": 4
+        },
+        "language": {
+          "type": "string",
+          "length": 2
+        },
+        "msToken": {
+          "redacted": true,
+          "length": 160
+        },
+        "odinId": {
+          "type": "string",
+          "length": 19
+        },
+        "os": {
+          "type": "string",
+          "length": 7
+        },
+        "priority_region": {
+          "type": "string",
+          "length": 2
+        },
+        "pullType": {
+          "type": "string",
+          "length": 1,
+          "value": "2"
+        },
+        "referer": {
+          "type": "string",
+          "length": 0
+        },
+        "region": {
+          "type": "string",
+          "length": 2
+        },
+        "screen_height": {
+          "type": "string",
+          "length": 4
+        },
+        "screen_width": {
+          "type": "string",
+          "length": 4
+        },
+        "tz_name": {
+          "type": "string",
+          "length": 13
+        },
+        "user_is_login": {
+          "type": "string",
+          "length": 4
+        },
+        "verifyFp": {
+          "type": "string",
+          "length": 52
+        },
+        "video_encoding": {
+          "type": "string",
+          "length": 4
+        },
+        "webcast_language": {
+          "type": "string",
+          "length": 6
+        }
+      },
+      "headers": {
+        ":authority": {
+          "type": "string",
+          "length": 14
+        },
+        ":method": {
+          "type": "string",
+          "length": 3
+        },
+        ":path": {
+          "type": "string",
+          "length": 2414
+        },
+        ":scheme": {
+          "type": "string",
+          "length": 5
+        },
+        "accept": {
+          "type": "string",
+          "length": 3
+        },
+        "accept-encoding": {
+          "type": "string",
+          "length": 23
+        },
+        "accept-language": {
+          "type": "string",
+          "length": 60
+        },
+        "priority": {
+          "type": "string",
+          "length": 6
+        },
+        "referer": {
+          "type": "string",
+          "length": 30
+        },
+        "sec-ch-ua": {
+          "type": "string",
+          "length": 64
+        },
+        "sec-ch-ua-mobile": {
+          "type": "string",
+          "length": 2
+        },
+        "sec-ch-ua-platform": {
+          "type": "string",
+          "length": 9
+        },
+        "sec-fetch-dest": {
+          "type": "string",
+          "length": 5
+        },
+        "sec-fetch-mode": {
+          "type": "string",
+          "length": 4
+        },
+        "sec-fetch-site": {
+          "type": "string",
+          "length": 11
+        },
+        "user-agent": {
+          "type": "string",
+          "length": 111
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "access-control-expose-headers": {
+          "type": "string",
+          "length": 25
+        },
+        "bd-tt-error-code": {
+          "type": "string",
+          "length": 1
+        },
+        "cache-control": {
+          "type": "string",
+          "length": 29
+        },
+        "content-encoding": {
+          "type": "string",
+          "length": 2
+        },
+        "content-type": {
+          "type": "string",
+          "length": 31
+        },
+        "date": {
+          "type": "string",
+          "length": 29
+        },
+        "expires": {
+          "type": "string",
+          "length": 29
+        },
+        "pragma": {
+          "type": "string",
+          "length": 8
+        },
+        "server": {
+          "type": "string",
+          "length": 5
+        },
+        "server-timing": {
+          "type": "string",
+          "length": 14
+        },
+        "tt-ticket-guard-result": {
+          "type": "string",
+          "length": 1
+        },
+        "tt_stable": {
+          "type": "string",
+          "length": 1
+        },
+        "x-akamai-request-id": {
+          "type": "string",
+          "length": 17
+        },
+        "x-cache": {
+          "type": "string",
+          "length": 115
+        },
+        "x-cache-remote": {
+          "type": "string",
+          "length": 116
+        },
+        "x-ms-token": {
+          "redacted": true,
+          "length": 160
+        },
+        "x-origin-response-time": {
+          "type": "string",
+          "length": 17
+        },
+        "x-parent-response-time": {
+          "type": "string",
+          "length": 16
+        },
+        "x-tt-logid": {
+          "type": "string",
+          "length": 34
+        },
+        "x-tt-trace-host": {
+          "type": "string",
+          "length": 322
+        },
+        "x-tt-trace-id": {
+          "type": "string",
+          "length": 55
+        },
+        "x-tt-trace-tag": {
+          "type": "string",
+          "length": 29
+        }
+      },
+      "set_cookie_names": [],
+      "body": {
+        "root_type": "object",
+        "keys": [
+          "cursor",
+          "extra",
+          "hasMore",
+          "itemList",
+          "log_pb",
+          "statusCode",
+          "status_code",
+          "status_msg"
+        ],
+        "item_containers": {
+          "itemList": 8
+        },
+        "pagination": {
+          "cursor": {
+            "redacted": true,
+            "length": 1
+          },
+          "hasMore": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      "body_source": "response_sample"
+    }
+  },
+  {
+    "action": "explore_session",
+    "category_name": "mixed",
+    "request": {
+      "endpoint": "https://www.tiktok.com/api/explore/item_list/",
+      "method": "GET",
+      "query": {
+        "WebIdLastTime": {
+          "type": "string",
+          "length": 10
+        },
+        "X-Bogus": {
+          "redacted": true,
+          "length": 1
+        },
+        "X-Dynosaur": {
+          "redacted": true,
+          "length": 444
+        },
+        "X-Gnarly": {
+          "redacted": true,
+          "length": 332
+        },
+        "aid": {
+          "type": "string",
+          "length": 4
+        },
+        "app_language": {
+          "type": "string",
+          "length": 6
+        },
+        "app_name": {
+          "type": "string",
+          "length": 10
+        },
+        "browser_language": {
+          "type": "string",
+          "length": 2
+        },
+        "browser_name": {
+          "type": "string",
+          "length": 7
+        },
+        "browser_online": {
+          "type": "string",
+          "length": 4
+        },
+        "browser_platform": {
+          "type": "string",
+          "length": 5
+        },
+        "browser_version": {
+          "type": "string",
+          "length": 103
+        },
+        "categoryType": {
+          "type": "string",
+          "length": 3,
+          "value": "119"
+        },
+        "channel": {
+          "type": "string",
+          "length": 10
+        },
+        "clientABVersions": {
+          "type": "string",
+          "length": 431
+        },
+        "cookie_enabled": {
+          "redacted": true,
+          "length": 4
+        },
+        "count": {
+          "type": "string",
+          "length": 1
+        },
+        "data_collection_enabled": {
+          "type": "string",
+          "length": 4
+        },
+        "device_id": {
+          "type": "string",
+          "length": 19
+        },
+        "device_platform": {
+          "type": "string",
+          "length": 6
+        },
+        "enable_cache": {
+          "type": "string",
+          "length": 5
+        },
+        "focus_state": {
+          "type": "string",
+          "length": 4
+        },
+        "from_page": {
+          "type": "string",
+          "length": 0
+        },
+        "history_len": {
+          "type": "string",
+          "length": 1
+        },
+        "is_fullscreen": {
+          "type": "string",
+          "length": 5
+        },
+        "is_new_user": {
+          "type": "string",
+          "length": 5
+        },
+        "is_page_visible": {
+          "type": "string",
+          "length": 4
+        },
+        "language": {
+          "type": "string",
+          "length": 2
+        },
+        "msToken": {
+          "redacted": true,
+          "length": 160
+        },
+        "odinId": {
+          "type": "string",
+          "length": 19
+        },
+        "os": {
+          "type": "string",
+          "length": 7
+        },
+        "priority_region": {
+          "type": "string",
+          "length": 2
+        },
+        "pullType": {
+          "type": "string",
+          "length": 1,
+          "value": "2"
+        },
+        "referer": {
+          "type": "string",
+          "length": 0
+        },
+        "region": {
+          "type": "string",
+          "length": 2
+        },
+        "screen_height": {
+          "type": "string",
+          "length": 4
+        },
+        "screen_width": {
+          "type": "string",
+          "length": 4
+        },
+        "tz_name": {
+          "type": "string",
+          "length": 13
+        },
+        "user_is_login": {
+          "type": "string",
+          "length": 4
+        },
+        "verifyFp": {
+          "type": "string",
+          "length": 52
+        },
+        "video_encoding": {
+          "type": "string",
+          "length": 4
+        },
+        "webcast_language": {
+          "type": "string",
+          "length": 6
+        }
+      },
+      "headers": {
+        ":authority": {
+          "type": "string",
+          "length": 14
+        },
+        ":method": {
+          "type": "string",
+          "length": 3
+        },
+        ":path": {
+          "type": "string",
+          "length": 2414
+        },
+        ":scheme": {
+          "type": "string",
+          "length": 5
+        },
+        "accept": {
+          "type": "string",
+          "length": 3
+        },
+        "accept-encoding": {
+          "type": "string",
+          "length": 23
+        },
+        "accept-language": {
+          "type": "string",
+          "length": 60
+        },
+        "priority": {
+          "type": "string",
+          "length": 6
+        },
+        "referer": {
+          "type": "string",
+          "length": 30
+        },
+        "sec-ch-ua": {
+          "type": "string",
+          "length": 64
+        },
+        "sec-ch-ua-mobile": {
+          "type": "string",
+          "length": 2
+        },
+        "sec-ch-ua-platform": {
+          "type": "string",
+          "length": 9
+        },
+        "sec-fetch-dest": {
+          "type": "string",
+          "length": 5
+        },
+        "sec-fetch-mode": {
+          "type": "string",
+          "length": 4
+        },
+        "sec-fetch-site": {
+          "type": "string",
+          "length": 11
+        },
+        "user-agent": {
+          "type": "string",
+          "length": 111
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "access-control-expose-headers": {
+          "type": "string",
+          "length": 25
+        },
+        "bd-tt-error-code": {
+          "type": "string",
+          "length": 1
+        },
+        "cache-control": {
+          "type": "string",
+          "length": 29
+        },
+        "content-encoding": {
+          "type": "string",
+          "length": 2
+        },
+        "content-type": {
+          "type": "string",
+          "length": 31
+        },
+        "date": {
+          "type": "string",
+          "length": 29
+        },
+        "expires": {
+          "type": "string",
+          "length": 29
+        },
+        "pragma": {
+          "type": "string",
+          "length": 8
+        },
+        "server": {
+          "type": "string",
+          "length": 5
+        },
+        "server-timing": {
+          "type": "string",
+          "length": 14
+        },
+        "tt-ticket-guard-result": {
+          "type": "string",
+          "length": 1
+        },
+        "tt_stable": {
+          "type": "string",
+          "length": 1
+        },
+        "x-akamai-request-id": {
+          "type": "string",
+          "length": 17
+        },
+        "x-cache": {
+          "type": "string",
+          "length": 115
+        },
+        "x-cache-remote": {
+          "type": "string",
+          "length": 116
+        },
+        "x-ms-token": {
+          "redacted": true,
+          "length": 160
+        },
+        "x-origin-response-time": {
+          "type": "string",
+          "length": 17
+        },
+        "x-parent-response-time": {
+          "type": "string",
+          "length": 16
+        },
+        "x-tt-logid": {
+          "type": "string",
+          "length": 34
+        },
+        "x-tt-trace-host": {
+          "type": "string",
+          "length": 322
+        },
+        "x-tt-trace-id": {
+          "type": "string",
+          "length": 55
+        },
+        "x-tt-trace-tag": {
+          "type": "string",
+          "length": 29
+        }
+      },
+      "set_cookie_names": [],
+      "body": {
+        "root_type": "object",
+        "keys": [
+          "cursor",
+          "extra",
+          "hasMore",
+          "itemList",
+          "log_pb",
+          "statusCode",
+          "status_code",
+          "status_msg"
+        ],
+        "item_containers": {
+          "itemList": 8
+        },
+        "pagination": {
+          "cursor": {
+            "redacted": true,
+            "length": 1
+          },
+          "hasMore": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      "body_source": "response_sample"
+    }
+  }
+]

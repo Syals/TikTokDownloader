@@ -1,0 +1,451 @@
+"""Opt-in signed collection of one TikTok Explore category and its media."""
+
+import argparse
+import asyncio
+import hashlib
+import json
+import os
+import sys
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from time import time
+from typing import Any
+from urllib.parse import quote, urlencode
+
+import httpx
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from poc.tiktok_explore_replay import (  # noqa: E402
+    DEFAULT_HAR_PATH,
+    DEFAULT_PROXY,
+    DEFAULT_SETTINGS_PATH,
+    EXPLORE_ITEM_LIST_ENDPOINT,
+    captured_explore_requests,
+    load_session,
+)
+from poc.tiktok_explore_poc import (  # noqa: E402
+    DEFAULT_CHUNK_KB,
+    DEFAULT_CONCURRENCY,
+    DEFAULT_MAX_RETRY,
+    download_headers,
+    download_one,
+    flatten_item,
+    headers,
+    item_directory_name,
+    select_urls,
+)
+from src.encrypt import XBogus, XGnarly  # noqa: E402
+
+
+DEFAULT_CATEGORY_TYPE = "120"
+DEFAULT_COUNT = 20
+DEFAULT_MAX_PAGES = 2
+DEFAULT_DELAY = 1.5
+DEFAULT_OUTPUT_DIR = Path(".output/tiktok_explore_signed")
+SIGNATURE_FIELDS = {"x-bogus", "x-gnarly", "x-dynosaur"}
+
+
+def build_explore_params(
+    template: Sequence[tuple[str, str]],
+    *,
+    category_type: str,
+    pull_type: str,
+    cursor: str,
+    count: int,
+    ms_token: str,
+) -> list[tuple[str, str]]:
+    """Reuse a captured parameter shape while replacing mutable fields."""
+    replacements = {
+        "categorytype": category_type,
+        "pulltype": pull_type,
+        "cursor": cursor,
+        "count": str(count),
+        "mstoken": ms_token,
+        "webidlasttime": str(int(time())),
+    }
+    params: list[tuple[str, str]] = []
+    present: set[str] = set()
+    for name, value in template:
+        normalized = name.lower()
+        if normalized in SIGNATURE_FIELDS:
+            continue
+        params.append((name, replacements.get(normalized, value)))
+        present.add(normalized)
+    for name in ("categoryType", "pullType", "cursor", "count", "msToken"):
+        if name.lower() not in present:
+            params.append((name, replacements[name.lower()]))
+    return params
+
+
+def signed_url(params: Sequence[tuple[str, str]], user_agent: str) -> str:
+    query = urlencode(params, safe="=", quote_via=quote)
+    x_bogus = XBogus().get_x_bogus(query, None, "GET", user_agent=user_agent)
+    x_gnarly = XGnarly().generate(query, "", "GET", user_agent=user_agent)
+    return f"{EXPLORE_ITEM_LIST_ENDPOINT}?{query}&X-Bogus={x_bogus}&X-Gnarly={x_gnarly}"
+
+
+def extract_explore_pagination(
+    payload: Mapping[str, Any], current_cursor: str
+) -> tuple[str, bool]:
+    cursor = payload.get("cursor", current_cursor)
+    has_more = payload.get("hasMore", payload.get("has_more", False))
+    return str(cursor), has_more.lower() == "true" if isinstance(
+        has_more, str
+    ) else bool(has_more)
+
+
+def flatten_explore_item(item: dict[str, Any], category_type: str) -> dict[str, Any]:
+    return flatten_item(item) | {"category_type": category_type}
+
+
+def select_template(
+    requests: Sequence[Mapping[str, Any]], category_type: str, pull_type: str
+) -> Mapping[str, Any]:
+    for request in requests:
+        if (
+            request.get("category_type") == category_type
+            and request.get("pull_type") == pull_type
+        ):
+            return request
+    raise ValueError(
+        f"no captured pullType={pull_type} request for categoryType={category_type}"
+    )
+
+
+def select_initial_template(
+    requests: Sequence[Mapping[str, Any]], category_type: str
+) -> tuple[Mapping[str, Any], str]:
+    try:
+        return select_template(requests, category_type, "1"), "1"
+    except ValueError:
+        return select_template(requests, category_type, "2"), "2"
+
+
+def initial_cursor(template: Mapping[str, Any]) -> str:
+    params = template.get("params", [])
+    if not isinstance(params, list):
+        return "0"
+    return next((value for name, value in params if name == "cursor"), "0")
+
+
+def refresh_session(cookie: dict[str, str], response: httpx.Response) -> None:
+    cookie.update(response.cookies.items())
+    if ms_token := response.headers.get("x-ms-token"):
+        cookie["msToken"] = ms_token
+
+
+async def fetch_explore_page(
+    client: httpx.AsyncClient,
+    *,
+    template: Mapping[str, Any],
+    category_type: str,
+    pull_type: str,
+    cursor: str,
+    count: int,
+    cookie: dict[str, str],
+    user_agent: str,
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    params = template.get("params")
+    if not isinstance(params, list):
+        raise ValueError("captured request parameters are missing")
+    response = await client.get(
+        signed_url(
+            build_explore_params(
+                params,
+                category_type=category_type,
+                pull_type=pull_type,
+                cursor=cursor,
+                count=count,
+                ms_token=cookie.get("msToken", ""),
+            ),
+            user_agent,
+        ),
+        headers=headers(cookie),
+    )
+    refresh_session(cookie, response)
+    summary: dict[str, Any] = {
+        "pull_type": pull_type,
+        "http_status": response.status_code,
+        "json": "application/json" in response.headers.get("content-type", ""),
+    }
+    if not summary["json"]:
+        return None, summary
+    try:
+        payload = response.json()
+    except json.JSONDecodeError:
+        return None, summary | {"json": False}
+    if not isinstance(payload, dict):
+        return None, summary
+    item_list = payload.get("itemList")
+    items = (
+        [item for item in item_list if isinstance(item, dict)]
+        if isinstance(item_list, list)
+        else []
+    )
+    next_cursor, has_more = extract_explore_pagination(payload, cursor)
+    summary |= {
+        "item_count": len(items),
+        "media_url_count": sum(
+            bool(
+                flatten_item(item).get("play_url")
+                or flatten_item(item).get("download_url")
+            )
+            for item in items
+        ),
+        "has_more": has_more,
+        "cursor_sha256": hashlib.sha256(next_cursor.encode()).hexdigest()[:12],
+    }
+    return payload, summary
+
+
+async def collect_explore(
+    client: httpx.AsyncClient,
+    *,
+    initial_template: Mapping[str, Any],
+    next_template: Mapping[str, Any],
+    category_type: str,
+    count: int,
+    max_pages: int,
+    delay: float,
+    cookie: dict[str, str],
+    user_agent: str,
+    initial_pull_type: str = "1",
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    cursor = initial_cursor(initial_template)
+    seen_ids: set[str] = set()
+    metadata: list[dict[str, Any]] = []
+    report: list[dict[str, Any]] = []
+
+    for page in range(1, max_pages + 1):
+        pull_type = initial_pull_type if page == 1 else "2"
+        template = initial_template if page == 1 else next_template
+        payload, summary = await fetch_explore_page(
+            client,
+            template=template,
+            category_type=category_type,
+            pull_type=pull_type,
+            cursor=cursor,
+            count=count,
+            cookie=cookie,
+            user_agent=user_agent,
+        )
+        summary["page"] = page
+        report.append(summary)
+        if payload is None:
+            break
+        item_list = payload.get("itemList")
+        if not isinstance(item_list, list):
+            break
+        new_item_count = 0
+        for item in item_list:
+            if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+                continue
+            if item["id"] in seen_ids:
+                continue
+            seen_ids.add(item["id"])
+            metadata.append(flatten_explore_item(item, category_type))
+            new_item_count += 1
+
+        next_cursor, has_more = extract_explore_pagination(payload, cursor)
+        if not has_more:
+            break
+        if page > 1 and next_cursor == cursor and not new_item_count:
+            break
+        cursor = (
+            initial_cursor(next_template)
+            if page == 1 and next_cursor == cursor
+            else next_cursor
+        )
+        if page < max_pages:
+            await asyncio.sleep(delay)
+
+    return metadata, report
+
+
+async def download_media(
+    client: httpx.AsyncClient,
+    metadata: Sequence[dict[str, Any]],
+    *,
+    output_dir: Path,
+    mode: str,
+    concurrency: int,
+    max_retry: int,
+    chunk_size: int,
+    user_agent: str,
+) -> list[dict[str, Any]]:
+    download_dir = output_dir / "downloads"
+    download_dir.mkdir(parents=True, exist_ok=True)
+    semaphore = asyncio.Semaphore(concurrency)
+    manifest: list[dict[str, Any]] = []
+
+    async def download(url: str, destination: Path) -> bool:
+        async with semaphore:
+            return await download_one(
+                client,
+                url,
+                destination,
+                download_headers(user_agent),
+                max_retry,
+                chunk_size,
+            )
+
+    tasks: list[asyncio.Task[bool]] = []
+    records: list[tuple[dict[str, Any], Path]] = []
+    for item in metadata:
+        item_dir = download_dir / item_directory_name(item)
+        item_dir.mkdir(parents=True, exist_ok=True)
+        (item_dir / "metadata.json").write_text(
+            json.dumps(item, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        for label, url in select_urls(item, mode):
+            destination = item_dir / f"{label}.mp4"
+            record = {
+                "id": item.get("id"),
+                "category_type": item.get("category_type"),
+                "label": label,
+                "media_path": destination.relative_to(output_dir).as_posix(),
+                "ok": False,
+                "bytes": None,
+            }
+            manifest.append(record)
+            records.append((record, destination))
+            tasks.append(asyncio.create_task(download(url, destination)))
+    for (record, destination), ok in zip(records, await asyncio.gather(*tasks)):
+        record["ok"] = ok
+        if destination.is_file():
+            record["bytes"] = destination.stat().st_size
+    return manifest
+
+
+def positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be a positive integer") from error
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
+def nonnegative_float(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be a non-negative number") from error
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be a non-negative number")
+    return parsed
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Opt-in pure-signed collection of a captured TikTok Explore category."
+    )
+    parser.add_argument("--live", action="store_true", help="Send signed requests.")
+    parser.add_argument(
+        "--download", action="store_true", help="Download returned media."
+    )
+    parser.add_argument("--category-type", default=DEFAULT_CATEGORY_TYPE)
+    parser.add_argument("--count", type=positive_int, default=DEFAULT_COUNT)
+    parser.add_argument("--max-pages", type=positive_int, default=DEFAULT_MAX_PAGES)
+    parser.add_argument("--delay", type=nonnegative_float, default=DEFAULT_DELAY)
+    parser.add_argument("--har", type=Path, default=DEFAULT_HAR_PATH)
+    parser.add_argument("--settings", type=Path, default=DEFAULT_SETTINGS_PATH)
+    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument(
+        "--url-mode", choices=("play_url", "download_url", "all"), default="play_url"
+    )
+    parser.add_argument("--concurrency", type=positive_int, default=DEFAULT_CONCURRENCY)
+    parser.add_argument("--max-retry", type=positive_int, default=DEFAULT_MAX_RETRY)
+    parser.add_argument("--chunk-kb", type=positive_int, default=DEFAULT_CHUNK_KB)
+    parser.add_argument("--proxy", default=os.getenv("TIKTOK_POC_PROXY", DEFAULT_PROXY))
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    if not args.live:
+        print("Refusing network access without --live.")
+        return 2
+    try:
+        har = json.loads(args.har.read_text(encoding="utf-8"))
+        if not isinstance(har, Mapping):
+            raise ValueError("HAR root must be an object")
+        requests = captured_explore_requests(har)
+        initial_template, initial_pull_type = select_initial_template(
+            requests, args.category_type
+        )
+        next_template = select_template(requests, args.category_type, "2")
+        cookie, user_agent = load_session(args.settings)
+    except (OSError, ValueError, json.JSONDecodeError):
+        print("ERROR: unable to load local Explore inputs.")
+        return 2
+
+    async def run() -> tuple[
+        list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]
+    ]:
+        async with httpx.AsyncClient(
+            headers={"User-Agent": user_agent},
+            cookies=cookie,
+            follow_redirects=True,
+            proxy=args.proxy or None,
+            timeout=30,
+            verify=False,
+        ) as client:
+            metadata, report = await collect_explore(
+                client,
+                initial_template=initial_template,
+                next_template=next_template,
+                category_type=args.category_type,
+                count=args.count,
+                max_pages=args.max_pages,
+                delay=args.delay,
+                cookie=cookie,
+                user_agent=user_agent,
+                initial_pull_type=initial_pull_type,
+            )
+            manifest = (
+                await download_media(
+                    client,
+                    metadata,
+                    output_dir=args.output_dir,
+                    mode=args.url_mode,
+                    concurrency=args.concurrency,
+                    max_retry=args.max_retry,
+                    chunk_size=args.chunk_kb * 1024,
+                    user_agent=user_agent,
+                )
+                if args.download and metadata
+                else []
+            )
+        return metadata, report, manifest
+
+    try:
+        metadata, report, manifest = asyncio.run(run())
+    except httpx.HTTPError as error:
+        print(f"NETWORK ERROR: {type(error).__name__}")
+        return 2
+
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    (args.output_dir / "metadata.json").write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    (args.output_dir / "report.json").write_text(
+        json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    if args.download:
+        (args.output_dir / "download_manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+    downloaded = sum(record["ok"] for record in manifest)
+    print(
+        f"Explore category {args.category_type}: {len(metadata)} item(s), "
+        f"{len(report)} page(s), {downloaded}/{len(manifest)} media file(s) downloaded."
+    )
+    return 0 if metadata and (not args.download or downloaded == len(manifest)) else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

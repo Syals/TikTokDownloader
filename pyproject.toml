@@ -21,6 +21,7 @@ dependencies = [
     "pydantic>=2.13.4",
     "pyperclip>=1.11.0",
     "rich>=15.0.0",
+    "rookiepy>=0.5.6",
     "uvicorn>=0.51.0",
 ]
 
@@ -109,7 +110,11 @@ docstring-code-format = false
 # enabled.
 docstring-code-line-length = "dynamic"
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "ruff>=0.14.0",
 ]
