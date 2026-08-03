@@ -2,7 +2,13 @@
 #    uv pip compile pyproject.toml --no-deps --no-strip-extras -o requirements.txt
 aiofiles==25.1.0
     # via douk-downloader (pyproject.toml)
+aiohttp==3.14.3
+    # via douk-downloader (pyproject.toml)
 aiosqlite==0.22.1
+    # via douk-downloader (pyproject.toml)
+asyncmy==0.2.11
+    # via douk-downloader (pyproject.toml)
+cryptography==50.0.0
     # via douk-downloader (pyproject.toml)
 emoji==2.15.0
     # via douk-downloader (pyproject.toml)
@@ -11,6 +17,8 @@ fastapi==0.139.0
 gmssl==3.2.2
     # via douk-downloader (pyproject.toml)
 httpx[socks]==0.28.1
+    # via douk-downloader (pyproject.toml)
+loguru==0.7.3
     # via douk-downloader (pyproject.toml)
 lxml==6.1.1
     # via douk-downloader (pyproject.toml)
@@ -22,9 +30,13 @@ pydantic==2.13.4
     # via douk-downloader (pyproject.toml)
 pyperclip==1.11.0
     # via douk-downloader (pyproject.toml)
+python-dotenv==1.2.2
+    # via douk-downloader (pyproject.toml)
 rich==15.0.0
     # via douk-downloader (pyproject.toml)
 rookiepy==0.5.6
+    # via douk-downloader (pyproject.toml)
+sqlalchemy==2.0.51
     # via douk-downloader (pyproject.toml)
 uvicorn==0.51.0
     # via douk-downloader (pyproject.toml)

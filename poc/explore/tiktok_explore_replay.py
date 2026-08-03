@@ -210,6 +210,20 @@ def load_session(settings_path: Path) -> tuple[dict[str, str], str]:
     return session, user_agent
 
 
+def load_device_id(settings_path: Path) -> str:
+    """读取与 TikTok 会话对应的浏览器 device_id。"""
+    settings = json.loads(settings_path.read_text(encoding="utf-8-sig"))
+    if not isinstance(settings, Mapping):
+        raise ValueError("settings 根节点必须是对象")
+    browser_info = settings.get("browser_info_tiktok")
+    if not isinstance(browser_info, Mapping):
+        raise ValueError("缺少 TikTok 浏览器配置")
+    device_id = browser_info.get("device_id")
+    if not isinstance(device_id, str) or not device_id:
+        raise ValueError("缺少 TikTok device_id")
+    return device_id
+
+
 async def replay_live(
     plan: Sequence[Mapping[str, Any]],
     cookie: dict[str, str],

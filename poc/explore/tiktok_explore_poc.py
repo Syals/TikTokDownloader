@@ -1,5 +1,3 @@
-"""对 TikTok Explore 分类及其媒体进行可选式签名采集。"""
-
 import argparse
 import asyncio
 import hashlib
@@ -38,9 +36,11 @@ from poc.explore.tiktok_explore_replay import (  # noqa: E402
     DEFAULT_SETTINGS_PATH,
     EXPLORE_ITEM_LIST_ENDPOINT,
     captured_explore_requests,
+    load_device_id,
     load_session,
 )
 from src.encrypt import XBogus, XGnarly  # noqa: E402
+from src.interface.template import APITikTok  # noqa: E402
 
 
 DEFAULT_CATEGORY_TYPE = "120"
@@ -49,6 +49,15 @@ DEFAULT_MAX_PAGES = 2
 DEFAULT_DELAY = 1.5
 DEFAULT_OUTPUT_DIR = Path(".output/explore/signed")
 SIGNATURE_FIELDS = {"x-bogus", "x-gnarly", "x-dynosaur"}
+
+
+def build_base_params(device_id: str) -> list[tuple[str, str]]:
+    """构造不依赖 HAR 的 Explore 参数模板。"""
+    params = APITikTok.params | {
+        "device_id": device_id,
+        "from_page": "explore",
+    }
+    return [(str(name), str(value)) for name, value in params.items()]
 
 
 def build_explore_params(
@@ -304,7 +313,7 @@ async def download_media(
             json.dumps(item, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
         for label, url in select_urls(item, mode):
-            destination = item_dir / f"{label}.mp4"
+            destination = item_dir / f"{item.get('id')}.mp4"
             record = {
                 "id": item.get("id"),
                 "category_type": item.get("category_type"),
@@ -404,18 +413,25 @@ def main() -> int:
         print("未指定 --live，拒绝联网。")
         return 2
     try:
-        har = json.loads(args.har.read_text(encoding="utf-8"))
-        if not isinstance(har, Mapping):
-            raise ValueError("HAR 根节点必须是对象")
-        requests = captured_explore_requests(har)
-        initial_template, initial_pull_type = select_initial_template(
-            requests, args.category_type
-        )
-        next_template = select_template(requests, args.category_type, "2")
         cookie, user_agent = load_session(args.settings)
+        if args.har.is_file():
+            har = json.loads(args.har.read_text(encoding="utf-8"))
+            if not isinstance(har, Mapping):
+                raise ValueError("HAR 根节点必须是对象")
+            requests = captured_explore_requests(har)
+            initial_template, initial_pull_type = select_initial_template(
+                requests, args.category_type
+            )
+            next_template = select_template(requests, args.category_type, "2")
+        else:
+            template = {"params": build_base_params(load_device_id(args.settings))}
+            initial_template = next_template = template
+            initial_pull_type = "1"
     except (OSError, ValueError, json.JSONDecodeError):
         print("错误: 无法加载本地 Explore 输入。")
         return 2
+    if not args.har.is_file():
+        print("未找到 HAR，使用合成 Explore 参数模板。")
 
     async def run() -> tuple[
         list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]
