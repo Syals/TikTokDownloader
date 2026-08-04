@@ -44,19 +44,83 @@ from src.interface.template import APITikTok  # noqa: E402
 
 
 DEFAULT_CATEGORY_TYPE = "120"
-DEFAULT_COUNT = 20
+DEFAULT_COUNT = 8
 DEFAULT_MAX_PAGES = 2
 DEFAULT_DELAY = 1.5
 DEFAULT_OUTPUT_DIR = Path(".output/explore/signed")
 SIGNATURE_FIELDS = {"x-bogus", "x-gnarly", "x-dynosaur"}
+BROWSER_REQUEST_FIELDS = (
+    "clientABVersions",
+    "odinId",
+    "verifyFp",
+    "is_new_user",
+    "video_encoding",
+)
+EXPLORE_TEMPLATE_KEYS = ("explore_initial_template", "explore_next_template")
 
 
-def build_base_params(device_id: str) -> list[tuple[str, str]]:
+def load_browser_request_params(settings_path: Path) -> dict[str, str]:
+    """读取浏览器实际 Explore 请求中可复用的身份字段。"""
+    settings = json.loads(settings_path.read_text(encoding="utf-8-sig"))
+    if not isinstance(settings, Mapping):
+        raise ValueError("settings 根节点必须是对象")
+    browser_info = settings.get("browser_info_tiktok")
+    if not isinstance(browser_info, Mapping):
+        return {}
+    return {
+        field: value
+        for field in BROWSER_REQUEST_FIELDS
+        if isinstance((value := browser_info.get(field)), str) and value
+    }
+
+
+def load_explore_templates(
+    settings_path: Path,
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]]] | None:
+    """读取诊断阶段捕获的首屏与翻页 query 模板。"""
+    settings = json.loads(settings_path.read_text(encoding="utf-8-sig"))
+    if not isinstance(settings, Mapping):
+        raise ValueError("settings 根节点必须是对象")
+    browser_info = settings.get("browser_info_tiktok")
+    if not isinstance(browser_info, Mapping):
+        return None
+
+    templates: list[list[tuple[str, str]]] = []
+    for key in EXPLORE_TEMPLATE_KEYS:
+        raw_template = browser_info.get(key)
+        if not isinstance(raw_template, list):
+            return None
+        template = [
+            (name, value)
+            for item in raw_template
+            if isinstance(item, list)
+            and len(item) == 2
+            and isinstance((name := item[0]), str)
+            and isinstance((value := item[1]), str)
+        ]
+        if not template:
+            return None
+        templates.append(template)
+    return templates[0], templates[1]
+
+
+def build_base_params(
+    device_id: str,
+    browser_request_params: Mapping[str, str] | None = None,
+    from_page: str | None = None,
+) -> list[tuple[str, str]]:
     """构造不依赖 HAR 的 Explore 参数模板。"""
     params = APITikTok.params | {
         "device_id": device_id,
-        "from_page": "explore",
     }
+    params.pop("from_page", None)
+    params.pop("msToken", None)
+    if from_page is not None:
+        params["from_page"] = from_page
+    if browser_request_params:
+        for field in BROWSER_REQUEST_FIELDS:
+            if value := browser_request_params.get(field):
+                params[field] = value
     return [(str(name), str(value)) for name, value in params.items()]
 
 
@@ -84,11 +148,19 @@ def build_explore_params(
         normalized = name.lower()
         if normalized in SIGNATURE_FIELDS:
             continue
+        if normalized == "cursor" and not cursor:
+            continue
+        if normalized == "mstoken" and not ms_token:
+            continue
         params.append((name, replacements.get(normalized, value)))
         present.add(normalized)
-    for name in ("categoryType", "pullType", "cursor", "count", "msToken"):
+    for name in ("categoryType", "pullType", "count"):
         if name.lower() not in present:
             params.append((name, replacements[name.lower()]))
+    if cursor and "cursor" not in present:
+        params.append(("cursor", cursor))
+    if ms_token and "mstoken" not in present:
+        params.append(("msToken", ms_token))
     return params
 
 
@@ -139,14 +211,18 @@ def select_initial_template(
 def initial_cursor(template: Mapping[str, Any]) -> str:
     params = template.get("params", [])
     if not isinstance(params, list):
-        return "0"
-    return next((value for name, value in params if name == "cursor"), "0")
+        return ""
+    return next((value for name, value in params if name == "cursor"), "")
 
 
-def refresh_session(cookie: dict[str, str], response: httpx.Response) -> None:
-    cookie.update(response.cookies.items())
+def refresh_session(cookie: dict[str, str], response: httpx.Response) -> str:
+    """刷新 cookie，并返回本响应新下发的 query msToken。"""
+    response_cookies = dict(response.cookies.items())
+    cookie.update(response_cookies)
     if ms_token := response.headers.get("x-ms-token"):
         cookie["msToken"] = ms_token
+        return ms_token
+    return response_cookies.get("msToken", "")
 
 
 async def fetch_explore_page(
@@ -158,39 +234,45 @@ async def fetch_explore_page(
     cursor: str,
     count: int,
     cookie: dict[str, str],
+    ms_token: str,
     user_agent: str,
-) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+) -> tuple[dict[str, Any] | None, dict[str, Any], str]:
     params = template.get("params")
     if not isinstance(params, list):
         raise ValueError("缺少抓包请求的参数")
+    request_params = build_explore_params(
+        params,
+        category_type=category_type,
+        pull_type=pull_type,
+        cursor=cursor,
+        count=count,
+        ms_token=ms_token,
+    )
     response = await client.get(
-        signed_url(
-            build_explore_params(
-                params,
-                category_type=category_type,
-                pull_type=pull_type,
-                cursor=cursor,
-                count=count,
-                ms_token=cookie.get("msToken", ""),
-            ),
-            user_agent,
-        ),
+        signed_url(request_params, user_agent),
         headers=headers(cookie, "https://www.tiktok.com/explore"),
     )
-    refresh_session(cookie, response)
+    next_ms_token = refresh_session(cookie, response)
     summary: dict[str, Any] = {
         "pull_type": pull_type,
         "http_status": response.status_code,
         "json": "application/json" in response.headers.get("content-type", ""),
+        "request_field_names": [name for name, _ in request_params],
+        "request_cursor_present": any(
+            name.lower() == "cursor" for name, _ in request_params
+        ),
+        "request_ms_token_present": any(
+            name.lower() == "mstoken" for name, _ in request_params
+        ),
     }
     if not summary["json"]:
-        return None, summary
+        return None, summary, next_ms_token
     try:
         payload = response.json()
     except json.JSONDecodeError:
-        return None, summary | {"json": False}
+        return None, summary | {"json": False}, next_ms_token
     if not isinstance(payload, dict):
-        return None, summary
+        return None, summary, next_ms_token
     item_list = payload.get("itemList")
     items = (
         [item for item in item_list if isinstance(item, dict)]
@@ -200,6 +282,11 @@ async def fetch_explore_page(
     next_cursor, has_more = extract_explore_pagination(payload, cursor)
     summary |= {
         "item_count": len(items),
+        "item_id_hashes": [
+            hashlib.sha256(item["id"].encode()).hexdigest()[:12]
+            for item in items
+            if isinstance(item.get("id"), str)
+        ],
         "media_url_count": sum(
             bool(
                 flatten_item(item).get("play_url")
@@ -209,8 +296,9 @@ async def fetch_explore_page(
         ),
         "has_more": has_more,
         "cursor_sha256": hashlib.sha256(next_cursor.encode()).hexdigest()[:12],
+        "received_ms_token": bool(next_ms_token),
     }
-    return payload, summary
+    return payload, summary, next_ms_token
 
 
 async def collect_explore(
@@ -227,6 +315,12 @@ async def collect_explore(
     initial_pull_type: str = "1",
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     cursor = initial_cursor(initial_template)
+    next_template_has_cursor = any(
+        name.lower() == "cursor"
+        for name, _ in next_template.get("params", [])
+        if isinstance(name, str)
+    )
+    request_ms_token = ""
     seen_ids: set[str] = set()
     metadata: list[dict[str, Any]] = []
     report: list[dict[str, Any]] = []
@@ -234,7 +328,7 @@ async def collect_explore(
     for page in range(1, max_pages + 1):
         pull_type = initial_pull_type if page == 1 else "2"
         template = initial_template if page == 1 else next_template
-        payload, summary = await fetch_explore_page(
+        payload, summary, next_ms_token = await fetch_explore_page(
             client,
             template=template,
             category_type=category_type,
@@ -242,12 +336,16 @@ async def collect_explore(
             cursor=cursor,
             count=count,
             cookie=cookie,
+            ms_token=request_ms_token,
             user_agent=user_agent,
         )
         summary["page"] = page
         report.append(summary)
         if payload is None:
             break
+        # 浏览器首屏响应的 x-ms-token 不会进入第 2 页 query；第 2 页响应后才开始使用。
+        if page > 1 and next_ms_token:
+            request_ms_token = next_ms_token
         item_list = payload.get("itemList")
         if not isinstance(item_list, list):
             break
@@ -264,13 +362,16 @@ async def collect_explore(
         next_cursor, has_more = extract_explore_pagination(payload, cursor)
         if not has_more:
             break
-        if page > 1 and next_cursor == cursor and not new_item_count:
+        if page > 1 and not new_item_count:
             break
-        cursor = (
-            initial_cursor(next_template)
-            if page == 1 and next_cursor == cursor
-            else next_cursor
-        )
+        if next_template_has_cursor:
+            cursor = (
+                initial_cursor(next_template)
+                if page == 1 and next_cursor == cursor
+                else next_cursor
+            )
+        else:
+            cursor = ""
         if page < max_pages:
             await asyncio.sleep(delay)
 
@@ -424,8 +525,23 @@ def main() -> int:
             )
             next_template = select_template(requests, args.category_type, "2")
         else:
-            template = {"params": build_base_params(load_device_id(args.settings))}
-            initial_template = next_template = template
+            if templates := load_explore_templates(args.settings):
+                initial_template = {"params": templates[0]}
+                next_template = {"params": templates[1]}
+            else:
+                initial_template = {
+                    "params": build_base_params(
+                        load_device_id(args.settings),
+                        load_browser_request_params(args.settings),
+                    )
+                }
+                next_template = {
+                    "params": build_base_params(
+                        load_device_id(args.settings),
+                        load_browser_request_params(args.settings),
+                        from_page="",
+                    )
+                }
             initial_pull_type = "1"
     except (OSError, ValueError, json.JSONDecodeError):
         print("错误: 无法加载本地 Explore 输入。")
