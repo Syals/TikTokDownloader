@@ -85,6 +85,8 @@ async def run_batch(
     chunk_size: int,
     cookie: dict[str, str],
     user_agent: str,
+    persist_and_upload: bool = False,
+    gateway: Any = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """串行遍历分类，单 client 共享 cookie；单分类失败不中断后续。"""
     if browser_templates:
