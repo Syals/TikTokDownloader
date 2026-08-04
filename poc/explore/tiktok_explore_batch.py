@@ -147,6 +147,23 @@ async def run_batch(
             if download:
                 save_json(category_dir / "download_manifest.json", manifest)
 
+            if persist_and_upload and metadata:
+                try:
+                    await persist_to_db(metadata, manifest)
+                    if download and manifest:
+                        from media_pipeline.application.tiktok_explore_upload import (
+                            upload_pending_explore,
+                        )
+
+                        await upload_pending_explore(
+                            media_root=output_dir,
+                            layout="batch",
+                            category_type=category_type,
+                            gateway=gateway,
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    category_summary["storage_warning"] = f"{type(exc).__name__}: {exc}"
+
             all_metadata.extend(metadata)
             all_manifest.extend(manifest)
 
@@ -232,9 +249,26 @@ def main() -> int:
         print(f"错误: 无法加载会话: {type(exc).__name__}: {exc}")
         return 2
 
-    async def run() -> tuple[
-        list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]
-    ]:
+    gateway = None
+    persist_and_upload = False
+    if not args.no_db:
+        try:
+            from media_pipeline.storage.providers import InterxtProvider
+            from media_pipeline.storage.store import StorageGateway
+
+            gateway = StorageGateway(
+                provider=InterxtProvider(), transport_type="rclone"
+            )
+            persist_and_upload = True
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"警告: 初始化 media-pipeline 存储网关失败，将跳过数据库持久化与上传: "
+                f"{type(exc).__name__}: {exc}"
+            )
+
+    async def run(
+        gateway: Any = None,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
         async with httpx.AsyncClient(
             headers={"User-Agent": user_agent},
             cookies=cookie,
@@ -261,27 +295,23 @@ def main() -> int:
                 chunk_size=args.chunk_kb * 1024,
                 cookie=cookie,
                 user_agent=user_agent,
+                persist_and_upload=persist_and_upload,
+                gateway=gateway,
             )
 
     try:
-        metadata, manifest, summary = asyncio.run(run())
+        metadata, manifest, summary = asyncio.run(run(gateway=gateway))
     except httpx.HTTPError as error:
         print(f"网络错误: {type(error).__name__}")
         return 2
+    finally:
+        if gateway is not None:
+            gateway.close()
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     save_json(args.output_dir / "all_metadata.json", metadata)
     save_json(args.output_dir / "all_manifest.json", manifest)
     save_json(args.output_dir / "summary.json", summary)
-
-    if not args.no_db:
-        try:
-            asyncio.run(persist_to_db(metadata, manifest))
-        except Exception as exc:  # noqa: BLE001
-            print(
-                f"警告: 持久化到 tiktok 库失败（JSON 照常落盘）: "
-                f"{type(exc).__name__}: {exc}"
-            )
 
     total_items = len(metadata)
     total_manifest = len(manifest)
