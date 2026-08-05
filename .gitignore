@@ -16,3 +16,4 @@ test*.py
 /tests/*
 *.mp4
 test*.py
+.env

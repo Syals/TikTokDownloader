@@ -15,10 +15,6 @@ import httpx
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-# 跨项目复用 media-pipeline 的 SQL 存储与上传模块（硬编码路径，见方案约定）。
-MEDIA_PIPELINE_ROOT = Path(r"C:\Users\admin\Documents\GitHub\scrapy_server异步")
-sys.path.insert(0, str(MEDIA_PIPELINE_ROOT))
-
 from poc.explore._common import (  # noqa: E402
     DEFAULT_CHUNK_KB,
     DEFAULT_CONCURRENCY,
@@ -446,20 +442,18 @@ async def download_media(
 async def persist_to_db(
     metadata: Sequence[dict[str, Any]], manifest: Sequence[dict[str, Any]]
 ) -> None:
-    """将采集元数据与下载结果持久化到 tiktok 库（media-pipeline 模块）。
+    """将采集元数据与下载结果持久化到 tiktok 库（src.explore 模块）。
 
-    失败由调用方捕获，不影响 JSON 落盘。采集侧统一指定 interxt 作为上传后端，
+    失败由调用方捕获，不影响 JSON 落盘。采集侧统一指定 s3 作为上传后端，
     per-video 的 s3_prefix 留给上传消费器分配。
     """
-    from media_pipeline.repositories.base import get_tiktok_db_session, init_tiktok_db
-    from media_pipeline.repositories.tiktok_explore_repository import (
-        TiktokExploreItemRepository,
-    )
+    from src.explore.db import get_tiktok_db_session, init_tiktok_db
+    from src.explore.repository import TiktokExploreItemRepository
 
     await init_tiktok_db()
     async with get_tiktok_db_session() as session:
         repo = TiktokExploreItemRepository(session)
-        await repo.upsert_batch(metadata, default_s3_provider="interxt")
+        await repo.upsert_batch(metadata, default_s3_provider="s3")
         for record in manifest:
             await repo.update_media(
                 record["id"],
@@ -516,7 +510,7 @@ def main() -> int:
     try:
         from dotenv import load_dotenv
 
-        load_dotenv(MEDIA_PIPELINE_ROOT / ".env")
+        load_dotenv()
     except ImportError:
         pass
     args = parse_args()
@@ -562,48 +556,53 @@ def main() -> int:
     async def run() -> tuple[
         list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]
     ]:
-        async with httpx.AsyncClient(
-            headers={"User-Agent": user_agent},
-            cookies=cookie,
-            follow_redirects=True,
-            proxy=args.proxy or None,
-            timeout=30,
-            verify=False,
-        ) as client:
-            metadata, report = await collect_explore(
-                client,
-                initial_template=initial_template,
-                next_template=next_template,
-                category_type=args.category_type,
-                count=args.count,
-                max_pages=args.max_pages,
-                delay=args.delay,
-                cookie=cookie,
-                user_agent=user_agent,
-                initial_pull_type=initial_pull_type,
-            )
-            manifest = (
-                await download_media(
-                    client,
-                    metadata,
-                    output_dir=args.output_dir,
-                    mode=args.url_mode,
-                    concurrency=args.concurrency,
-                    max_retry=args.max_retry,
-                    chunk_size=args.chunk_kb * 1024,
-                    user_agent=user_agent,
-                )
-                if args.download and metadata
-                else []
-            )
         try:
-            await persist_to_db(metadata, manifest)
-        except Exception as exc:
-            print(
-                f"警告: 持久化到 tiktok 库失败（JSON 照常落盘）: "
-                f"{type(exc).__name__}: {exc}"
-            )
-        return metadata, report, manifest
+            async with httpx.AsyncClient(
+                headers={"User-Agent": user_agent},
+                cookies=cookie,
+                follow_redirects=True,
+                proxy=args.proxy or None,
+                timeout=30,
+                verify=False,
+            ) as client:
+                metadata, report = await collect_explore(
+                    client,
+                    initial_template=initial_template,
+                    next_template=next_template,
+                    category_type=args.category_type,
+                    count=args.count,
+                    max_pages=args.max_pages,
+                    delay=args.delay,
+                    cookie=cookie,
+                    user_agent=user_agent,
+                    initial_pull_type=initial_pull_type,
+                )
+                manifest = (
+                    await download_media(
+                        client,
+                        metadata,
+                        output_dir=args.output_dir,
+                        mode=args.url_mode,
+                        concurrency=args.concurrency,
+                        max_retry=args.max_retry,
+                        chunk_size=args.chunk_kb * 1024,
+                        user_agent=user_agent,
+                    )
+                    if args.download and metadata
+                    else []
+                )
+            try:
+                await persist_to_db(metadata, manifest)
+            except Exception as exc:
+                print(
+                    f"警告: 持久化到 tiktok 库失败（JSON 照常落盘）: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+            return metadata, report, manifest
+        finally:
+            from src.explore.db import dispose_tiktok_db
+
+            await dispose_tiktok_db()
 
     try:
         metadata, report, manifest = asyncio.run(run())

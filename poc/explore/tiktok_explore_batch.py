@@ -151,9 +151,7 @@ async def run_batch(
                 try:
                     await persist_to_db(metadata, manifest)
                     if download and manifest:
-                        from media_pipeline.application.tiktok_explore_upload import (
-                            upload_pending_explore,
-                        )
+                        from src.explore.upload import upload_pending_explore
 
                         await upload_pending_explore(
                             media_root=output_dir,
@@ -224,8 +222,7 @@ def main() -> int:
     try:
         from dotenv import load_dotenv
 
-        MEDIA_PIPELINE_ROOT = Path(r"C:\Users\admin\Documents\GitHub\scrapy_server异步")
-        load_dotenv(MEDIA_PIPELINE_ROOT / ".env")
+        load_dotenv()
     except ImportError:
         pass
 
@@ -253,51 +250,53 @@ def main() -> int:
     persist_and_upload = False
     if not args.no_db:
         try:
-            from media_pipeline.storage.providers import InterxtProvider
-            from media_pipeline.storage.store import StorageGateway
+            from src.explore.s3 import S3Uploader
 
-            gateway = StorageGateway(
-                provider=InterxtProvider(), transport_type="rclone"
-            )
+            gateway = S3Uploader()
             persist_and_upload = True
         except Exception as exc:  # noqa: BLE001
             print(
-                f"警告: 初始化 media-pipeline 存储网关失败，将跳过数据库持久化与上传: "
+                f"警告: 初始化 S3 上传器失败，将跳过数据库持久化与上传: "
                 f"{type(exc).__name__}: {exc}"
             )
 
     async def run(
         gateway: Any = None,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-        async with httpx.AsyncClient(
-            headers={"User-Agent": user_agent},
-            cookies=cookie,
-            follow_redirects=True,
-            proxy=args.proxy or None,
-            timeout=30,
-            verify=False,
-        ) as client:
-            return await run_batch(
-                client,
-                categories=categories,
-                device_id=device_id,
-                browser_request_params=browser_request_params,
-                browser_templates=browser_templates,
-                count=args.count,
-                max_pages=args.max_pages,
-                delay=args.delay,
-                category_delay=args.category_delay,
-                output_dir=args.output_dir,
-                download=args.download,
-                url_mode=args.url_mode,
-                concurrency=args.concurrency,
-                max_retry=args.max_retry,
-                chunk_size=args.chunk_kb * 1024,
-                cookie=cookie,
-                user_agent=user_agent,
-                persist_and_upload=persist_and_upload,
-                gateway=gateway,
-            )
+        try:
+            async with httpx.AsyncClient(
+                headers={"User-Agent": user_agent},
+                cookies=cookie,
+                follow_redirects=True,
+                proxy=args.proxy or None,
+                timeout=30,
+                verify=False,
+            ) as client:
+                return await run_batch(
+                    client,
+                    categories=categories,
+                    device_id=device_id,
+                    browser_request_params=browser_request_params,
+                    browser_templates=browser_templates,
+                    count=args.count,
+                    max_pages=args.max_pages,
+                    delay=args.delay,
+                    category_delay=args.category_delay,
+                    output_dir=args.output_dir,
+                    download=args.download,
+                    url_mode=args.url_mode,
+                    concurrency=args.concurrency,
+                    max_retry=args.max_retry,
+                    chunk_size=args.chunk_kb * 1024,
+                    cookie=cookie,
+                    user_agent=user_agent,
+                    persist_and_upload=persist_and_upload,
+                    gateway=gateway,
+                )
+        finally:
+            from src.explore.db import dispose_tiktok_db
+
+            await dispose_tiktok_db()
 
     try:
         metadata, manifest, summary = asyncio.run(run(gateway=gateway))
