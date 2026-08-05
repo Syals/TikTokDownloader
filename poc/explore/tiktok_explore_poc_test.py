@@ -144,3 +144,53 @@ def test_load_browser_fields_and_device_id_from_settings() -> None:
             [("categoryType", "120"), ("pullType", "1")],
             [("categoryType", "120"), ("pullType", "2")],
         )
+
+
+def test_load_browser_request_params_tolerates_missing_optional_verify_fp() -> None:
+    with tempfile.TemporaryDirectory(dir=".") as temp_dir:
+        settings_path = Path(temp_dir) / "settings.json"
+        settings_path.write_text(
+            json.dumps(
+                {
+                    "cookie_tiktok": {"sessionid": "session"},
+                    "browser_info_tiktok": {
+                        "User-Agent": "Mozilla/5.0",
+                        "device_id": "1234567890",
+                        "clientABVersions": "ab-versions",
+                        "odinId": "odin-id",
+                        "is_new_user": "false",
+                        "video_encoding": "h264",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assert load_browser_request_params(settings_path) == {
+            "clientABVersions": "ab-versions",
+            "odinId": "odin-id",
+            "is_new_user": "false",
+            "video_encoding": "h264",
+        }
+
+
+def test_load_browser_request_params_empty_when_required_missing() -> None:
+    with tempfile.TemporaryDirectory(dir=".") as temp_dir:
+        settings_path = Path(temp_dir) / "settings.json"
+        settings_path.write_text(
+            json.dumps(
+                {
+                    "cookie_tiktok": {"sessionid": "session"},
+                    "browser_info_tiktok": {
+                        "User-Agent": "Mozilla/5.0",
+                        "device_id": "1234567890",
+                        "clientABVersions": "ab-versions",
+                        "odinId": "odin-id",
+                        "is_new_user": "false",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assert load_browser_request_params(settings_path) == {}

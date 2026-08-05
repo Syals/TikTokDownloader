@@ -17,7 +17,6 @@ def test_extract_browser_request_params_requires_complete_field_set() -> None:
         {
             "clientABVersions": "ab",
             "odinId": "odin",
-            "verifyFp": "verify",
             "is_new_user": "false",
             "video_encoding": "h264",
         },
@@ -26,9 +25,28 @@ def test_extract_browser_request_params_requires_complete_field_set() -> None:
     assert extract_browser_request_params(queries) == {
         "clientABVersions": "ab",
         "odinId": "odin",
-        "verifyFp": "verify",
         "is_new_user": "false",
         "video_encoding": "h264",
+    }
+
+
+def test_extract_browser_request_params_includes_optional_fields_when_present() -> None:
+    queries = [
+        {
+            "clientABVersions": "ab",
+            "odinId": "odin",
+            "is_new_user": "false",
+            "video_encoding": "h264",
+            "verifyFp": "verify",
+        },
+    ]
+
+    assert extract_browser_request_params(queries) == {
+        "clientABVersions": "ab",
+        "odinId": "odin",
+        "is_new_user": "false",
+        "video_encoding": "h264",
+        "verifyFp": "verify",
     }
 
 

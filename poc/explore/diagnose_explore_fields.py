@@ -37,8 +37,9 @@ from poc.explore.tiktok_explore_replay import (  # noqa: E402
     load_session,
 )
 from poc.explore.tiktok_explore_poc import (  # noqa: E402
-    BROWSER_REQUEST_FIELDS,
     EXPLORE_TEMPLATE_KEYS,
+    OPTIONAL_BROWSER_FIELDS,
+    REQUIRED_BROWSER_FIELDS,
 )
 from poc.session.harvest_tiktok_session import (  # noqa: E402
     EXPLORE_URL,
@@ -47,7 +48,9 @@ from poc.session.harvest_tiktok_session import (  # noqa: E402
 )
 
 
-TARGET_FIELDS = BROWSER_REQUEST_FIELDS + ("msToken", "cursor")
+TARGET_FIELDS = (
+    REQUIRED_BROWSER_FIELDS + OPTIONAL_BROWSER_FIELDS + ("msToken", "cursor")
+)
 SSR_KEYS = ("__UNIVERSAL_DATA_FOR_REHYDRATION__", "SIGI_STATE", "__NEXT_DATA__")
 
 
@@ -162,15 +165,22 @@ def analyze_response_progression(responses: list[dict[str, Any]]) -> None:
 
 
 def extract_browser_request_params(queries: list[dict[str, str]]) -> dict[str, str]:
-    """返回第一条包含所有固定浏览器字段的真实请求。"""
+    """返回第一条包含所有必填浏览器字段的真实请求，可选字段存在时一并保留。"""
     for params in queries:
-        extracted = {
+        required = {
             field: params[field]
-            for field in BROWSER_REQUEST_FIELDS
+            for field in REQUIRED_BROWSER_FIELDS
             if params.get(field)
         }
-        if len(extracted) == len(BROWSER_REQUEST_FIELDS):
-            return extracted
+        if len(required) != len(REQUIRED_BROWSER_FIELDS):
+            continue
+        optional = {
+            field: params[field]
+            for field in OPTIONAL_BROWSER_FIELDS
+            if params.get(field)
+        }
+        required.update(optional)
+        return required
     return {}
 
 
@@ -352,6 +362,16 @@ async def diagnose(context, page, args: argparse.Namespace) -> None:
     if not browser_request_params:
         print("未捕获完整字段集，未写入 settings.json。")
     else:
+        missing_optional = [
+            field
+            for field in OPTIONAL_BROWSER_FIELDS
+            if field not in browser_request_params
+        ]
+        if missing_optional:
+            print(
+                "警告: 以下可选字段在真实请求中未出现，将不写入: "
+                f"{', '.join(missing_optional)}"
+            )
         for field, value in browser_request_params.items():
             print(f"{field}: len={len(value)}, sample={truncate(value, 8)}")
         if args.write_settings:

@@ -49,29 +49,39 @@ DEFAULT_MAX_PAGES = 2
 DEFAULT_DELAY = 1.5
 DEFAULT_OUTPUT_DIR = Path(".output/explore/signed")
 SIGNATURE_FIELDS = {"x-bogus", "x-gnarly", "x-dynosaur"}
-BROWSER_REQUEST_FIELDS = (
+REQUIRED_BROWSER_FIELDS = (
     "clientABVersions",
     "odinId",
-    "verifyFp",
     "is_new_user",
     "video_encoding",
 )
+OPTIONAL_BROWSER_FIELDS = ("verifyFp",)
+BROWSER_REQUEST_FIELDS = REQUIRED_BROWSER_FIELDS + OPTIONAL_BROWSER_FIELDS
 EXPLORE_TEMPLATE_KEYS = ("explore_initial_template", "explore_next_template")
 
 
 def load_browser_request_params(settings_path: Path) -> dict[str, str]:
-    """读取浏览器实际 Explore 请求中可复用的身份字段。"""
+    """读取浏览器实际 Explore 请求中可复用的身份字段，可选字段缺失不影响使用。"""
     settings = json.loads(settings_path.read_text(encoding="utf-8-sig"))
     if not isinstance(settings, Mapping):
         raise ValueError("settings 根节点必须是对象")
     browser_info = settings.get("browser_info_tiktok")
     if not isinstance(browser_info, Mapping):
         return {}
-    return {
+    required_values = {
         field: value
-        for field in BROWSER_REQUEST_FIELDS
+        for field in REQUIRED_BROWSER_FIELDS
         if isinstance((value := browser_info.get(field)), str) and value
     }
+    if len(required_values) != len(REQUIRED_BROWSER_FIELDS):
+        return {}
+    optional_values = {
+        field: value
+        for field in OPTIONAL_BROWSER_FIELDS
+        if isinstance((value := browser_info.get(field)), str) and value
+    }
+    required_values.update(optional_values)
+    return required_values
 
 
 def load_explore_templates(
