@@ -14,7 +14,7 @@ import httpx
 
 
 EXPLORE_ITEM_LIST_ENDPOINT = "https://www.tiktok.com/api/explore/item_list/"
-DEFAULT_PROXY = "http://127.0.0.1:64142"
+DEFAULT_PROXY = ""
 DEFAULT_HAR_PATH = Path("explore-har.json")
 DEFAULT_SETTINGS_PATH = Path("Volume/settings.json")
 DEFAULT_REPORT_PATH = Path("reverse-records/explore_replay.json")
