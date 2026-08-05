@@ -66,8 +66,24 @@ def save_json(path: Path, data: object) -> None:
     )
 
 
+def _client_kwargs(
+    user_agent: str,
+    cookie: dict[str, str],
+    proxy: str | None,
+    timeout: float = 30,
+) -> dict[str, Any]:
+    return {
+        "headers": {"User-Agent": user_agent},
+        "cookies": cookie,
+        "follow_redirects": True,
+        "proxy": proxy or None,
+        "timeout": timeout,
+        "verify": False,
+        "limits": httpx.Limits(max_connections=50, max_keepalive_connections=10),
+    }
+
+
 async def run_batch(
-    client: httpx.AsyncClient,
     *,
     categories: Sequence[str],
     device_id: str,
@@ -85,10 +101,11 @@ async def run_batch(
     chunk_size: int,
     cookie: dict[str, str],
     user_agent: str,
+    proxy: str | None,
     persist_and_upload: bool = False,
     gateway: Any = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-    """串行遍历分类，单 client 共享 cookie；单分类失败不中断后续。"""
+    """串行遍历分类，每个分类使用独立 AsyncClient；单分类失败不中断后续。"""
     if browser_templates:
         initial_template: dict[str, Any] = {"params": browser_templates[0]}
         next_template: dict[str, Any] = {"params": browser_templates[1]}
@@ -116,31 +133,34 @@ async def run_batch(
         }
 
         try:
-            metadata, report = await collect_explore(
-                client,
-                initial_template=initial_template,
-                next_template=next_template,
-                category_type=category_type,
-                count=count,
-                max_pages=max_pages,
-                delay=delay,
-                cookie=cookie,
-                user_agent=user_agent,
-                initial_pull_type="1",
-            )
-
-            manifest: list[dict[str, Any]] = []
-            if download and metadata:
-                manifest = await download_media(
+            async with httpx.AsyncClient(
+                **_client_kwargs(user_agent, cookie, proxy)
+            ) as client:
+                metadata, report = await collect_explore(
                     client,
-                    metadata,
-                    output_dir=category_dir,
-                    mode=url_mode,
-                    concurrency=concurrency,
-                    max_retry=max_retry,
-                    chunk_size=chunk_size,
+                    initial_template=initial_template,
+                    next_template=next_template,
+                    category_type=category_type,
+                    count=count,
+                    max_pages=max_pages,
+                    delay=delay,
+                    cookie=cookie,
                     user_agent=user_agent,
+                    initial_pull_type="1",
                 )
+
+                manifest: list[dict[str, Any]] = []
+                if download and metadata:
+                    manifest = await download_media(
+                        client,
+                        metadata,
+                        output_dir=category_dir,
+                        mode=url_mode,
+                        concurrency=concurrency,
+                        max_retry=max_retry,
+                        chunk_size=chunk_size,
+                        user_agent=user_agent,
+                    )
 
             save_json(category_dir / "metadata.json", metadata)
             save_json(category_dir / "report.json", report)
@@ -264,35 +284,27 @@ def main() -> int:
         gateway: Any = None,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
         try:
-            async with httpx.AsyncClient(
-                headers={"User-Agent": user_agent},
-                cookies=cookie,
-                follow_redirects=True,
+            return await run_batch(
+                categories=categories,
+                device_id=device_id,
+                browser_request_params=browser_request_params,
+                browser_templates=browser_templates,
+                count=args.count,
+                max_pages=args.max_pages,
+                delay=args.delay,
+                category_delay=args.category_delay,
+                output_dir=args.output_dir,
+                download=args.download,
+                url_mode=args.url_mode,
+                concurrency=args.concurrency,
+                max_retry=args.max_retry,
+                chunk_size=args.chunk_kb * 1024,
+                cookie=cookie,
+                user_agent=user_agent,
                 proxy=args.proxy or None,
-                timeout=30,
-                verify=False,
-            ) as client:
-                return await run_batch(
-                    client,
-                    categories=categories,
-                    device_id=device_id,
-                    browser_request_params=browser_request_params,
-                    browser_templates=browser_templates,
-                    count=args.count,
-                    max_pages=args.max_pages,
-                    delay=args.delay,
-                    category_delay=args.category_delay,
-                    output_dir=args.output_dir,
-                    download=args.download,
-                    url_mode=args.url_mode,
-                    concurrency=args.concurrency,
-                    max_retry=args.max_retry,
-                    chunk_size=args.chunk_kb * 1024,
-                    cookie=cookie,
-                    user_agent=user_agent,
-                    persist_and_upload=persist_and_upload,
-                    gateway=gateway,
-                )
+                persist_and_upload=persist_and_upload,
+                gateway=gateway,
+            )
         finally:
             from src.explore.db import dispose_tiktok_db
 

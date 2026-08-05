@@ -5,7 +5,6 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -95,11 +94,9 @@ def test_run_batch_aggregates_despite_persist_failure(
 
     with tempfile.TemporaryDirectory(dir=".") as tmp_dir:
         output_dir = Path(tmp_dir)
-        client = AsyncMock()
 
         metadata, manifest, summary = asyncio.run(
             run_batch(
-                client,
                 categories=["119"],
                 device_id="d1",
                 browser_request_params={},
@@ -116,6 +113,7 @@ def test_run_batch_aggregates_despite_persist_failure(
                 chunk_size=1024,
                 cookie={},
                 user_agent="test",
+                proxy=None,
                 persist_and_upload=True,
                 gateway="fake-gateway",
             )

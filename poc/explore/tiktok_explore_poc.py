@@ -6,6 +6,7 @@ import os
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from random import uniform
 from time import time
 from typing import Any
 from urllib.parse import quote, urlencode
@@ -254,57 +255,67 @@ async def fetch_explore_page(
         count=count,
         ms_token=ms_token,
     )
-    response = await client.get(
-        signed_url(request_params, user_agent),
-        headers=headers(cookie, "https://www.tiktok.com/explore"),
-    )
-    next_ms_token = refresh_session(cookie, response)
-    summary: dict[str, Any] = {
-        "pull_type": pull_type,
-        "http_status": response.status_code,
-        "json": "application/json" in response.headers.get("content-type", ""),
-        "request_field_names": [name for name, _ in request_params],
-        "request_cursor_present": any(
-            name.lower() == "cursor" for name, _ in request_params
-        ),
-        "request_ms_token_present": any(
-            name.lower() == "mstoken" for name, _ in request_params
-        ),
-    }
-    if not summary["json"]:
-        return None, summary, next_ms_token
-    try:
-        payload = response.json()
-    except json.JSONDecodeError:
-        return None, summary | {"json": False}, next_ms_token
-    if not isinstance(payload, dict):
-        return None, summary, next_ms_token
-    item_list = payload.get("itemList")
-    items = (
-        [item for item in item_list if isinstance(item, dict)]
-        if isinstance(item_list, list)
-        else []
-    )
-    next_cursor, has_more = extract_explore_pagination(payload, cursor)
-    summary |= {
-        "item_count": len(items),
-        "item_id_hashes": [
-            hashlib.sha256(item["id"].encode()).hexdigest()[:12]
-            for item in items
-            if isinstance(item.get("id"), str)
-        ],
-        "media_url_count": sum(
-            bool(
-                flatten_item(item).get("play_url")
-                or flatten_item(item).get("download_url")
+    url = signed_url(request_params, user_agent)
+    request_headers = headers(cookie, "https://www.tiktok.com/explore")
+    max_attempts = 3
+    last_error: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = await client.get(url, headers=request_headers)
+            response.raise_for_status()
+            next_ms_token = refresh_session(cookie, response)
+            summary: dict[str, Any] = {
+                "pull_type": pull_type,
+                "http_status": response.status_code,
+                "json": "application/json" in response.headers.get("content-type", ""),
+                "request_field_names": [name for name, _ in request_params],
+                "request_cursor_present": any(
+                    name.lower() == "cursor" for name, _ in request_params
+                ),
+                "request_ms_token_present": any(
+                    name.lower() == "mstoken" for name, _ in request_params
+                ),
+            }
+            if not summary["json"]:
+                return None, summary, next_ms_token
+            try:
+                payload = response.json()
+            except json.JSONDecodeError:
+                return None, summary | {"json": False}, next_ms_token
+            if not isinstance(payload, dict):
+                return None, summary, next_ms_token
+            item_list = payload.get("itemList")
+            items = (
+                [item for item in item_list if isinstance(item, dict)]
+                if isinstance(item_list, list)
+                else []
             )
-            for item in items
-        ),
-        "has_more": has_more,
-        "cursor_sha256": hashlib.sha256(next_cursor.encode()).hexdigest()[:12],
-        "received_ms_token": bool(next_ms_token),
-    }
-    return payload, summary, next_ms_token
+            next_cursor, has_more = extract_explore_pagination(payload, cursor)
+            summary |= {
+                "item_count": len(items),
+                "item_id_hashes": [
+                    hashlib.sha256(item["id"].encode()).hexdigest()[:12]
+                    for item in items
+                    if isinstance(item.get("id"), str)
+                ],
+                "media_url_count": sum(
+                    bool(
+                        flatten_item(item).get("play_url")
+                        or flatten_item(item).get("download_url")
+                    )
+                    for item in items
+                ),
+                "has_more": has_more,
+                "cursor_sha256": hashlib.sha256(next_cursor.encode()).hexdigest()[:12],
+                "received_ms_token": bool(next_ms_token),
+            }
+            return payload, summary, next_ms_token
+        except httpx.RequestError as exc:
+            last_error = exc
+            if attempt >= max_attempts:
+                break
+            await asyncio.sleep(1.0 * (2 ** (attempt - 1)) + uniform(0, 1))
+    raise last_error or httpx.RequestError("探索页面请求失败")
 
 
 async def collect_explore(
