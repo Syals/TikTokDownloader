@@ -75,18 +75,24 @@ class S3Uploader:
             kwargs["region_name"] = region
         self._client = boto3.client("s3", **kwargs)
 
-    async def upload_file(self, local_file_path: str, remote_s3_path: str) -> bool:
+    async def upload_file(
+        self,
+        local_file_path: str,
+        remote_s3_path: str,
+        bucket: str | None = None,
+    ) -> bool:
         """上传本地文件到 S3。成功返回 True，失败记录日志并返回 False。"""
+        target_bucket = bucket or self.bucket
         try:
             await asyncio.to_thread(
                 self._client.upload_file,
                 local_file_path,
-                self.bucket,
+                target_bucket,
                 remote_s3_path,
             )
         except (BotoCoreError, ClientError, OSError) as exc:
             logger.error(
-                f"S3 upload failed: {local_file_path} -> {self.bucket}/"
+                f"S3 upload failed: {local_file_path} -> {target_bucket}/"
                 f"{remote_s3_path}: {exc}"
             )
             return False

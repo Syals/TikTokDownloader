@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -23,6 +24,7 @@ from sqlalchemy.ext.asyncio import (
 
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
+_lock = threading.Lock()
 
 
 def _build_engine() -> AsyncEngine:
@@ -43,20 +45,24 @@ def get_engine() -> AsyncEngine:
     """获取或创建 TikTok 数据库异步引擎（线程安全单例）。"""
     global _engine  # noqa: PLW0603
     if _engine is None:
-        _engine = _build_engine()
+        with _lock:
+            if _engine is None:
+                _engine = _build_engine()
     return _engine
 
 
 def get_session_factory() -> async_sessionmaker[AsyncSession]:
-    """获取或创建 TikTok 数据库 session 工厂。"""
+    """获取或创建 TikTok 数据库 session 工厂（线程安全单例）。"""
     global _session_factory  # noqa: PLW0603
     if _session_factory is None:
-        _session_factory = async_sessionmaker(
-            bind=get_engine(),
-            class_=AsyncSession,
-            autoflush=False,
-            expire_on_commit=False,
-        )
+        with _lock:
+            if _session_factory is None:
+                _session_factory = async_sessionmaker(
+                    bind=get_engine(),
+                    class_=AsyncSession,
+                    autoflush=False,
+                    expire_on_commit=False,
+                )
     return _session_factory
 
 

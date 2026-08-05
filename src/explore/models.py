@@ -137,7 +137,7 @@ class TiktokExploreItemModel(TiktokBase):
     s3_provider: Mapped[str | None] = mapped_column(
         String(32),
         nullable=True,
-        comment="S3 provider_key，如 interxt",
+        comment="S3 provider_key，当前固定为 s3",
     )
     s3_bucket: Mapped[str | None] = mapped_column(
         String(255),

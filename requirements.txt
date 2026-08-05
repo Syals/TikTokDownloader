@@ -8,6 +8,8 @@ aiosqlite==0.22.1
     # via douk-downloader (pyproject.toml)
 asyncmy==0.2.11
     # via douk-downloader (pyproject.toml)
+boto3==1.43.64
+    # via douk-downloader (pyproject.toml)
 cryptography==50.0.0
     # via douk-downloader (pyproject.toml)
 emoji==2.15.0

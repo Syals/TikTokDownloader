@@ -21,7 +21,12 @@ from src.explore.repository import TiktokExploreItemRepository
 class _UploadGateway(Protocol):
     """上传网关最小协议，便于测试与复用连接。"""
 
-    async def upload_file(self, local_file_path: str, remote_s3_path: str) -> bool: ...
+    async def upload_file(
+        self,
+        local_file_path: str,
+        remote_s3_path: str,
+        bucket: str | None = None,
+    ) -> bool: ...
     def close(self) -> None: ...
 
 
@@ -149,7 +154,9 @@ async def upload_pending_explore(
                 key = build_object_key(record, local.name, key_prefix)
                 async with semaphore:
                     try:
-                        ok = await active_gateway.upload_file(str(local), key)
+                        ok = await active_gateway.upload_file(
+                            str(local), key, record.get("s3_bucket")
+                        )
                     except Exception as exc:  # noqa: BLE001
                         logger.error(f"上传异常 {video_id} -> {key}: {exc}")
                         ok = False

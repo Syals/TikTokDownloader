@@ -9,10 +9,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -124,7 +123,7 @@ class TiktokExploreItemRepository:
         stmt = (
             update(TiktokExploreItemModel)
             .where(TiktokExploreItemModel.video_id.in_(video_ids))
-            .values(is_uploaded=2, uploaded_at=datetime.now())
+            .values(is_uploaded=2, uploaded_at=text("CURRENT_TIMESTAMP"))
         )
         result = await self.session.execute(stmt)
         return getattr(result, "rowcount", None) or 0
@@ -185,7 +184,7 @@ class TiktokExploreItemRepository:
             .values(
                 is_uploaded=1,
                 s3_object_key=object_key,
-                uploaded_at=datetime.now(),
+                uploaded_at=text("CURRENT_TIMESTAMP"),
             )
         )
         result = await self.session.execute(stmt)
@@ -196,7 +195,7 @@ class TiktokExploreItemRepository:
         stmt = (
             update(TiktokExploreItemModel)
             .where(TiktokExploreItemModel.video_id == video_id)
-            .values(is_uploaded=2, uploaded_at=datetime.now())
+            .values(is_uploaded=2, uploaded_at=text("CURRENT_TIMESTAMP"))
         )
         result = await self.session.execute(stmt)
         return (getattr(result, "rowcount", None) or 0) > 0
@@ -214,6 +213,7 @@ class TiktokExploreItemRepository:
                 TiktokExploreItemModel.video_id,
                 TiktokExploreItemModel.media_path,
                 TiktokExploreItemModel.s3_provider,
+                TiktokExploreItemModel.s3_bucket,
                 TiktokExploreItemModel.s3_prefix,
                 TiktokExploreItemModel.category_type,
             )
@@ -235,6 +235,7 @@ class TiktokExploreItemRepository:
                 "video_id": row.video_id,
                 "media_path": row.media_path,
                 "s3_provider": row.s3_provider,
+                "s3_bucket": row.s3_bucket,
                 "s3_prefix": row.s3_prefix,
                 "category_type": row.category_type,
             }
