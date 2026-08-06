@@ -1,0 +1,11 @@
+[Unit]
+Description=Douyin Downloader session harvest (headless Chromium)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/TikTokDownloader
+ExecStart=/home/tiktok/.local/bin/uv run python poc/session/harvest_tiktok_session.py
+# harvest 成功写入新 cookie 后重启 server，让运行中的进程读到新会话
+ExecStartPost=/bin/systemctl restart tiktok-downloader.service

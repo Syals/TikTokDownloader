@@ -1,0 +1,9 @@
+[Unit]
+Description=Run TikTok batch crawl (night profile) every day at 22:00
+
+[Timer]
+OnCalendar=*-*-* 22:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

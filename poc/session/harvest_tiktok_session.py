@@ -54,9 +54,18 @@ import argparse
 import asyncio
 import json
 import re
+import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from poc.explore._categories import (  # noqa: E402
+    find_explore_categories,
+    merge_explore_categories,
+    save_category_names,
+)
+
 SETTINGS_PATH = PROJECT_ROOT / "Volume" / "settings.json"
 PROFILE_DIR = PROJECT_ROOT / "Volume" / "browser_profile_tiktok"
 
@@ -65,6 +74,10 @@ IP_CHECK_URL = "https://ipinfo.io/json"
 
 WID_PATTERN = re.compile(r'"wid":"(\d{15,20})"')
 CHROME_VERSION_PATTERN = re.compile(r"Chrome/([\d.]+)")
+REHYDRATION_SCRIPT_PATTERN = re.compile(
+    r'<script[^>]*id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)</script>',
+    re.DOTALL,
+)
 
 # 这些西班牙专属字段是权威的，绝不能被浏览器运行时采集到的任何内容覆盖。
 # 只有 UA / platform / os / screen / device_id / browser_language 会从浏览器刷新。
@@ -127,6 +140,52 @@ async def check_egress_country(page, expected: str = "ES") -> bool:
     return True
 
 
+def extract_ssr_json(html: str | None) -> object:
+    """从探索页 HTML 提取 __UNIVERSAL_DATA_FOR_REHYDRATION__ 脚本内容。"""
+    if not html:
+        return None
+    match = REHYDRATION_SCRIPT_PATTERN.search(html)
+    if not match:
+        return None
+    try:
+        return json.loads(match.group(1).strip())
+    except json.JSONDecodeError:
+        return None
+
+
+async def harvest_categories(page, html: str | None = None) -> dict[str, str]:
+    """从探索页 SSR 提取分类映射并合并去重。
+
+    优先读浏览器内 SSR 树；失败时回退解析已抓取的 HTML。
+    """
+    categories = await page.evaluate(
+        """
+        () => {
+            const find = (obj) => {
+                if (!obj || typeof obj !== 'object') return null;
+                const hit = obj.exploreCategoryList;
+                if (hit && typeof hit === 'object') return hit;
+                for (const v of Object.values(obj)) {
+                    const found = find(v);
+                    if (found) return found;
+                }
+                return null;
+            };
+            const root = window.__UNIVERSAL_DATA_FOR_REHYDRATION__;
+            return root ? find(root) : null;
+        }
+        """
+    )
+    merged = merge_explore_categories(categories)
+    if merged:
+        return merged
+
+    if html is None:
+        html = await page.content()
+    payload = find_explore_categories(extract_ssr_json(html))
+    return merge_explore_categories(payload)
+
+
 async def harvest(context, page) -> dict:
     print(f"[采集] 正在加载 {EXPLORE_URL} ...")
     await page.goto(EXPLORE_URL, wait_until="domcontentloaded", timeout=60000)
@@ -179,6 +238,7 @@ async def harvest(context, page) -> dict:
 
     return {
         "device_id": wid,
+        "categories": await harvest_categories(page, html),
         "cookie": cookie_dict,
         "User-Agent": ua,
         "browser_platform": nav["platform"],
@@ -228,6 +288,7 @@ def report(data: dict) -> None:
     print(f"  browser_language : {data['browser_language']}")
     print(f"  screen           : {data['screen_width']}x{data['screen_height']}")
     print(f"  cookie 数量      : {len(data['cookie'])}")
+    print(f"  explore 分类     : {len(data.get('categories', {}))} 个")
     has_session = "sessionid" in data["cookie"]
     has_mstoken = "msToken" in data["cookie"]
     print(f"  sessionid        : {'yes' if has_session else 'NO'}")
@@ -337,6 +398,17 @@ async def main() -> int:
                 "     已保留的西班牙参数: "
                 + ", ".join(f"{k}={v}" for k, v in SPAIN_LOCKED_PARAMS.items())
             )
+            if categories := data.get("categories"):
+                categories_path = save_category_names(categories)
+                print(
+                    f"[完成] 已写入分类映射 {categories_path} "
+                    f"({len(categories)} 个分类)"
+                )
+            else:
+                print(
+                    "[警告] 未从页面提取到 explore 分类列表；"
+                    "Volume/explore_categories.json 未更新。"
+                )
             return 0
         finally:
             await context.close()

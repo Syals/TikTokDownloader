@@ -15,6 +15,16 @@ import httpx
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from poc.explore._batch_config import (  # noqa: E402
+    BatchConfigError,
+    load_batch_config,
+)
+from poc.explore._categories import (  # noqa: E402
+    DEFAULT_CATEGORIES_PATH,
+    get_category_name,
+    list_categories,
+    load_category_names,
+)
 from poc.explore._common import (  # noqa: E402
     DEFAULT_CHUNK_KB,
     DEFAULT_CONCURRENCY,
@@ -32,19 +42,35 @@ from poc.explore.tiktok_explore_poc import (  # noqa: E402
     positive_int,
 )
 from poc.explore.tiktok_explore_replay import (  # noqa: E402
-    DEFAULT_PROXY,
     DEFAULT_SETTINGS_PATH,
     load_device_id,
     load_session,
 )
 
 
-DEFAULT_CATEGORIES = "119,120,123"
+DEFAULT_CATEGORIES = ""
 DEFAULT_OUTPUT_DIR = Path(".output/explore/batch")
 DEFAULT_CATEGORY_DELAY = 5.0
 DEFAULT_MAX_PAGES = 2
 DEFAULT_COUNT = 8
 DEFAULT_DELAY = 2.0
+
+# 这些字段可由配置（defaults + profile）覆盖；会话相关字段不在其中。
+CONFIGURABLE_FIELDS = (
+    "categories",
+    "count",
+    "max_pages",
+    "delay",
+    "category_delay",
+    "concurrency",
+    "max_retry",
+    "chunk_kb",
+    "url_mode",
+    "download",
+    "no_db",
+    "output_dir",
+    "proxy",
+)
 
 
 def parse_categories(text: str) -> list[str]:
@@ -86,6 +112,7 @@ def _client_kwargs(
 async def run_batch(
     *,
     categories: Sequence[str],
+    category_names: Mapping[str, str],
     device_id: str,
     browser_request_params: Mapping[str, str],
     browser_templates: tuple[list[tuple[str, str]], list[tuple[str, str]]] | None,
@@ -127,8 +154,10 @@ async def run_batch(
     for index, category_type in enumerate(categories):
         started_at = time()
         category_dir = output_dir / category_type
+        category_name = get_category_name(category_type, category_names)
         category_summary: dict[str, Any] = {
             "category_type": category_type,
+            "category_name": category_name,
             "status": "running",
         }
 
@@ -148,6 +177,8 @@ async def run_batch(
                     user_agent=user_agent,
                     initial_pull_type="1",
                 )
+                for item in metadata:
+                    item["category_name"] = category_name
 
                 manifest: list[dict[str, Any]] = []
                 if download and metadata:
@@ -213,29 +244,128 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         description="批量遍历多个 TikTok Explore 分类并采集 + 下载。",
     )
     parser.add_argument("--live", action="store_true", help="发送联网请求。")
-    parser.add_argument("--download", action="store_true", help="下载媒体文件。")
-    parser.add_argument("--categories", default=DEFAULT_CATEGORIES)
-    parser.add_argument("--count", type=positive_int, default=DEFAULT_COUNT)
-    parser.add_argument("--max-pages", type=positive_int, default=DEFAULT_MAX_PAGES)
-    parser.add_argument("--delay", type=nonnegative_float, default=DEFAULT_DELAY)
     parser.add_argument(
-        "--category-delay", type=nonnegative_float, default=DEFAULT_CATEGORY_DELAY
+        "--download",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="下载媒体文件（--no-download 关闭）。",
     )
+    parser.add_argument(
+        "--categories", default=None, help="分类 ID（逗号分隔，如 104,112）。"
+    )
+    parser.add_argument(
+        "--categories-file",
+        type=Path,
+        default=DEFAULT_CATEGORIES_PATH,
+        help="分类 ID→名称映射 JSON（由 harvest_tiktok_session 生成）。",
+    )
+    parser.add_argument(
+        "--list-categories",
+        action="store_true",
+        help="列出已知分类 ID→名称后退出（默认读取本地映射文件）。",
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help="读取 JSON 配置（Volume/batch_config.json）。",
+    )
+    parser.add_argument(
+        "--profile", default=None, help="档位名，从配置的 profiles 中选取。"
+    )
+    parser.add_argument("--count", type=positive_int, default=None)
+    parser.add_argument("--max-pages", type=positive_int, default=None)
+    parser.add_argument("--delay", type=nonnegative_float, default=None)
+    parser.add_argument("--category-delay", type=nonnegative_float, default=None)
     parser.add_argument("--settings", type=Path, default=DEFAULT_SETTINGS_PATH)
-    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument(
         "--url-mode",
         choices=URL_MODES,
-        default="play_url",
+        default=None,
     )
-    parser.add_argument("--concurrency", type=positive_int, default=DEFAULT_CONCURRENCY)
-    parser.add_argument("--max-retry", type=positive_int, default=DEFAULT_MAX_RETRY)
-    parser.add_argument("--chunk-kb", type=positive_int, default=DEFAULT_CHUNK_KB)
-    parser.add_argument("--proxy", default=os.getenv("TIKTOK_POC_PROXY", DEFAULT_PROXY))
-    parser.add_argument(
-        "--no-db", action="store_true", help="跳过 media-pipeline 数据库存储。"
+    parser.add_argument("--concurrency", type=positive_int, default=None)
+    parser.add_argument("--max-retry", type=positive_int, default=None)
+    parser.add_argument("--chunk-kb", type=positive_int, default=None)
+    parser.add_argument("--proxy", default=None)
+    db_group = parser.add_mutually_exclusive_group()
+    db_group.add_argument(
+        "--db",
+        dest="no_db",
+        action="store_false",
+        default=None,
+        help="启用 media-pipeline 数据库存储。",
+    )
+    db_group.add_argument(
+        "--no-db",
+        dest="no_db",
+        action="store_true",
+        default=None,
+        help="跳过 media-pipeline 数据库存储。",
     )
     return parser.parse_args(argv)
+
+
+def resolve_config(
+    args: argparse.Namespace,
+    cfg: Mapping[str, Any],
+) -> dict[str, Any]:
+    """按 CLI > 配置 > 内置默认 的优先级合并可配置字段。"""
+    builtin: dict[str, Any] = {
+        "categories": DEFAULT_CATEGORIES,
+        "count": DEFAULT_COUNT,
+        "max_pages": DEFAULT_MAX_PAGES,
+        "delay": DEFAULT_DELAY,
+        "category_delay": DEFAULT_CATEGORY_DELAY,
+        "concurrency": DEFAULT_CONCURRENCY,
+        "max_retry": DEFAULT_MAX_RETRY,
+        "chunk_kb": DEFAULT_CHUNK_KB,
+        "url_mode": URL_MODES[0],
+        "download": False,
+        "no_db": False,
+        "output_dir": str(DEFAULT_OUTPUT_DIR),
+        "proxy": None,
+    }
+    resolved: dict[str, Any] = {}
+    for name in CONFIGURABLE_FIELDS:
+        cli_value = getattr(args, name)
+        resolved[name] = (
+            cli_value if cli_value is not None else cfg.get(name, builtin[name])
+        )
+    # proxy 单独处理：仅当 CLI 与配置都未提供（None）时才回退环境变量；
+    # 显式空字符串表示"不使用代理"，不应命中 TIKTOK_POC_PROXY。
+    # 注意与其他 poc/explore 脚本的内联 env 解析不同：此处配置优先于环境变量。
+    proxy = resolved["proxy"]
+    if proxy is None:
+        proxy = os.getenv("TIKTOK_POC_PROXY") or None
+    resolved["proxy"] = proxy
+    return resolved
+
+
+def _print_category_help(names: Mapping[str, str]) -> None:
+    if not names:
+        print(
+            "提示: 当前没有本地分类映射（Volume/explore_categories.json）。\n"
+            "请先运行 harvest_tiktok_session --proxy <西班牙代理> "
+            "生成映射后再重试。"
+        )
+        return
+    print("已知分类:")
+    for id_, name in list_categories(names):
+        print(f"  {id_:>6}  {name}")
+
+
+def _print_categories(categories_file: Path) -> int:
+    names = load_category_names(categories_file)
+    if not names:
+        print(
+            f"未找到分类映射: {categories_file}\n"
+            "请先运行 harvest_tiktok_session（--proxy 西班牙出口）生成映射。"
+        )
+        return 2
+    for id_, name in list_categories(names):
+        print(f"{id_:>6}  {name}")
+    return 0
 
 
 def main() -> int:
@@ -248,13 +378,36 @@ def main() -> int:
 
     args = parse_args()
 
+    if args.list_categories:
+        if args.live:
+            print(
+                "[提示] --list-categories 使用本地映射文件；如需联网刷新请单独运行 harvest_tiktok_session 后重试。"
+            )
+        return _print_categories(args.categories_file)
+
     if not args.live:
         print("未指定 --live，拒绝联网。")
         return 2
 
-    categories = parse_categories(args.categories)
+    try:
+        cfg = load_batch_config(args.config, args.profile)
+    except BatchConfigError as exc:
+        print(f"配置错误: {exc}")
+        return 2
+    resolved = resolve_config(args, cfg)
+    output_dir = Path(resolved["output_dir"])
+
+    category_names = load_category_names(args.categories_file)
+    categories = parse_categories(resolved["categories"])
     if not categories:
         print("错误: --categories 为空。")
+        _print_category_help(category_names)
+        return 2
+
+    unknown = [category for category in categories if category not in category_names]
+    if unknown:
+        print("错误: 以下分类 ID 不在已知映射列表中: " + ", ".join(unknown))
+        _print_category_help(category_names)
         return 2
 
     try:
@@ -268,7 +421,7 @@ def main() -> int:
 
     gateway = None
     persist_and_upload = False
-    if not args.no_db:
+    if not resolved["no_db"]:
         try:
             from src.explore.s3 import S3Uploader
 
@@ -286,22 +439,23 @@ def main() -> int:
         try:
             return await run_batch(
                 categories=categories,
+                category_names=category_names,
                 device_id=device_id,
                 browser_request_params=browser_request_params,
                 browser_templates=browser_templates,
-                count=args.count,
-                max_pages=args.max_pages,
-                delay=args.delay,
-                category_delay=args.category_delay,
-                output_dir=args.output_dir,
-                download=args.download,
-                url_mode=args.url_mode,
-                concurrency=args.concurrency,
-                max_retry=args.max_retry,
-                chunk_size=args.chunk_kb * 1024,
+                count=resolved["count"],
+                max_pages=resolved["max_pages"],
+                delay=resolved["delay"],
+                category_delay=resolved["category_delay"],
+                output_dir=output_dir,
+                download=resolved["download"],
+                url_mode=resolved["url_mode"],
+                concurrency=resolved["concurrency"],
+                max_retry=resolved["max_retry"],
+                chunk_size=resolved["chunk_kb"] * 1024,
                 cookie=cookie,
                 user_agent=user_agent,
-                proxy=args.proxy or None,
+                proxy=resolved["proxy"] or None,
                 persist_and_upload=persist_and_upload,
                 gateway=gateway,
             )
@@ -319,10 +473,10 @@ def main() -> int:
         if gateway is not None:
             gateway.close()
 
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    save_json(args.output_dir / "all_metadata.json", metadata)
-    save_json(args.output_dir / "all_manifest.json", manifest)
-    save_json(args.output_dir / "summary.json", summary)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    save_json(output_dir / "all_metadata.json", metadata)
+    save_json(output_dir / "all_manifest.json", manifest)
+    save_json(output_dir / "summary.json", summary)
 
     total_items = len(metadata)
     total_manifest = len(manifest)
@@ -333,15 +487,20 @@ def main() -> int:
     )
     for category_type, cat_summary in summary.items():
         status = cat_summary.get("status")
+        category_name = cat_summary.get("category_name") or "-"
         if status == "ok":
             print(
-                f"  [{category_type}] {cat_summary['items']} 条目 / "
+                f"  [{category_type}] {category_name}: "
+                f"{cat_summary['items']} 条目 / "
                 f"{cat_summary['pages']} 页 / "
                 f"已下载 {cat_summary['downloaded']} / "
                 f"{cat_summary['duration_seconds']} 秒"
             )
         else:
-            print(f"  [{category_type}] {status}: {cat_summary.get('error', '')}")
+            print(
+                f"  [{category_type}] {category_name}: "
+                f"{status}: {cat_summary.get('error', '')}"
+            )
 
     return (
         0

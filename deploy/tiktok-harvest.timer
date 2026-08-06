@@ -1,0 +1,10 @@
+[Unit]
+Description=Run TikTok session harvest every 8 hours
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=8h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

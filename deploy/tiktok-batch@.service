@@ -1,0 +1,11 @@
+[Unit]
+Description=Douyin Downloader Explore batch crawl (profile=%i)
+# 先运行 harvest 刷新会话与 Volume/explore_categories.json，batch 才能通过
+# 分类 ID 校验（缺失映射时 batch 会以退出码 2 失败）。
+After=network-online.target tiktok-harvest.service
+Wants=network-online.target tiktok-harvest.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/TikTokDownloader
+ExecStart=/home/tiktok/.local/bin/uv run python poc/explore/tiktok_explore_batch.py --live --config Volume/batch_config.json --profile %i

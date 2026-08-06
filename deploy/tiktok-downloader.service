@@ -1,0 +1,16 @@
+[Unit]
+Description=Douyin Downloader Web API (server mode)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/TikTokDownloader
+# 替换为实际 uv 路径：bash -lc 'command -v uv'
+ExecStart=/home/tiktok/.local/bin/uv run main.py
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

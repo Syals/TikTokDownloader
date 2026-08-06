@@ -1,0 +1,23 @@
+{
+  "defaults": {
+    "download": true,
+    "concurrency": 5,
+    "max_retry": 3,
+    "chunk_kb": 1024,
+    "url_mode": "play_url",
+    "delay": 2.0,
+    "category_delay": 5.0,
+    "no_db": false
+  },
+  "profiles": {
+    "night": {
+      "categories": "100,104,107,112,119",
+      "count": 12,
+      "max_pages": 5,
+      "delay": 1.0,
+      "category_delay": 3.0,
+      "concurrency": 10,
+      "output_dir": ".output/explore/batch_night"
+    }
+  }
+}
