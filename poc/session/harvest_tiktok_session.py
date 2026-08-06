@@ -345,7 +345,11 @@ async def main() -> int:
         "locale": "es-ES",
         "timezone_id": "Europe/Madrid",
         "viewport": {"width": 1536, "height": 864},
-        "args": ["--disable-blink-features=AutomationControlled"],
+        "args": [
+            "--disable-blink-features=AutomationControlled",
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+        ],
     }
     if args.proxy:
         launch_kwargs["proxy"] = {"server": args.proxy}
