@@ -364,8 +364,10 @@ async def collect_explore(
         if page > 1 and next_ms_token:
             request_ms_token = next_ms_token
         item_list = payload.get("itemList")
-        if not isinstance(item_list, list):
-            break
+        item_list_missing = not isinstance(item_list, list)
+        summary["item_list_missing"] = item_list_missing
+        if item_list_missing:
+            item_list = []
         new_item_count = 0
         for item in item_list:
             if not isinstance(item, dict) or not isinstance(item.get("id"), str):

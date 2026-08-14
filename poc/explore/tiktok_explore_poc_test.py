@@ -1,6 +1,8 @@
+import asyncio
 import json
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -8,6 +10,7 @@ from poc.explore.tiktok_explore_poc import (
     BROWSER_REQUEST_FIELDS,
     build_base_params,
     build_explore_params,
+    collect_explore,
     initial_cursor,
     load_browser_request_params,
     load_explore_templates,
@@ -101,6 +104,49 @@ def test_refresh_session_returns_only_a_new_response_ms_token() -> None:
 
     assert refresh_session(cookie, response) == "fresh"
     assert cookie["msToken"] == "fresh"
+
+
+def test_collect_explore_continues_after_missing_initial_item_list(
+    monkeypatch,
+) -> None:
+    calls: list[dict[str, Any]] = []
+
+    async def fake_fetch_explore_page(*_: Any, **kwargs: Any):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            return {"hasMore": True, "cursor": "next"}, {}, ""
+        return (
+            {
+                "hasMore": False,
+                "cursor": "end",
+                "itemList": [{"id": "video-1"}],
+            },
+            {},
+            "",
+        )
+
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_poc.fetch_explore_page",
+        fake_fetch_explore_page,
+    )
+
+    metadata, report = asyncio.run(
+        collect_explore(
+            client=httpx.AsyncClient(),
+            initial_template={"params": [("cursor", "0")]},
+            next_template={"params": [("cursor", "next")]},
+            category_type="100",
+            count=8,
+            max_pages=2,
+            delay=0,
+            cookie={},
+            user_agent="test",
+        )
+    )
+
+    assert [call["pull_type"] for call in calls] == ["1", "2"]
+    assert [item["id"] for item in metadata] == ["video-1"]
+    assert report[0]["item_list_missing"] is True
 
 
 def test_load_browser_fields_and_device_id_from_settings() -> None:
