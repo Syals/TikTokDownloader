@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -15,6 +16,7 @@ from poc.explore.tiktok_explore_anonymous import (  # noqa: E402
     AnonymousBootstrap,
     AnonymousValidationError,
     _client_kwargs,
+    _evidence_gate_diagnostics,
     main,
     parse_args,
     reject_login_cookies,
@@ -72,6 +74,58 @@ def test_http_client_preserves_tls_verification_and_shared_proxy() -> None:
     kwargs = _client_kwargs(_bootstrap(), "http://proxy.example:8080")
     assert kwargs["proxy"] == "http://proxy.example:8080"
     assert "verify" not in kwargs
+
+
+@pytest.mark.parametrize(
+    ("metadata", "report", "expected_reason"),
+    [
+        (
+            [{"id": "1"}],
+            [{"http_status": 200, "json": True, "item_count": 1, "has_more": False}],
+            "视频元数据中没有 play_url 或 download_url",
+        ),
+        (
+            [{"id": "1", "play_url": "https://cdn.example/1.mp4"}],
+            [{"http_status": 403, "json": False, "item_count": 0, "has_more": False}],
+            "首响应 HTTP 状态=403（期望 200）",
+        ),
+        (
+            [{"id": "1", "play_url": "https://cdn.example/1.mp4"}],
+            [
+                {
+                    "http_status": 200,
+                    "json": True,
+                    "item_count": 1,
+                    "has_more": True,
+                    "item_id_hashes": ["first"],
+                }
+            ],
+            "首响应 has_more=true，但未获得第 2 页响应报告",
+        ),
+        (
+            [{"id": "1", "play_url": "https://cdn.example/1.mp4"}],
+            [
+                {
+                    "http_status": 200,
+                    "json": True,
+                    "item_count": 1,
+                    "has_more": True,
+                    "item_id_hashes": ["same"],
+                },
+                {"item_id_hashes": ["same"]},
+            ],
+            "翻页响应没有包含相对首屏的新视频 ID",
+        ),
+    ],
+)
+def test_evidence_gate_diagnostics_identifies_the_failed_requirement(
+    metadata: list[dict[str, object]],
+    report: list[dict[str, object]],
+    expected_reason: str,
+) -> None:
+    diagnostics = _evidence_gate_diagnostics(metadata, report)
+
+    assert expected_reason in diagnostics["reasons"]
 
 
 def test_harvest_categories_requires_live_flag(
@@ -213,7 +267,7 @@ def test_run_batch_blocks_side_effects_when_evidence_gate_fails(
         "poc.explore.tiktok_explore_anonymous.collect_explore", fake_collect_explore
     )
 
-    with pytest.raises(AnonymousValidationError, match="证据门"):
+    with pytest.raises(AnonymousValidationError, match="证据门") as error:
         asyncio.run(
             run_batch(
                 categories=["104"],
@@ -234,4 +288,53 @@ def test_run_batch_blocks_side_effects_when_evidence_gate_fails(
             )
         )
 
+    assert "未提取到任何视频元数据" in str(error.value)
     assert not (project_tmp / "104" / "metadata.json").exists()
+    diagnostic = json.loads(
+        (project_tmp / "104" / "evidence_failure.json").read_text(encoding="utf-8")
+    )
+    assert "未提取到任何视频元数据" in diagnostic["reasons"]
+    assert diagnostic["report"][0]["item_count"] == 0
+
+
+def test_run_batch_records_http_status_errors_from_direct_replay(
+    monkeypatch: pytest.MonkeyPatch, project_tmp: Path
+) -> None:
+    async def fake_collect_explore(*_: Any, **__: Any) -> tuple[list[dict], list[dict]]:
+        request = httpx.Request("GET", "https://www.tiktok.com/api/explore/item_list/")
+        response = httpx.Response(
+            403, headers={"content-type": "text/html"}, request=request
+        )
+        raise httpx.HTTPStatusError("Forbidden", request=request, response=response)
+
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_anonymous.collect_explore", fake_collect_explore
+    )
+
+    with pytest.raises(AnonymousValidationError, match="直接 HTTP 请求失败") as error:
+        asyncio.run(
+            run_batch(
+                categories=["104"],
+                category_names={"104": "One"},
+                state=_bootstrap(),
+                count=8,
+                max_pages=1,
+                delay=0,
+                category_delay=0,
+                output_dir=project_tmp,
+                download=True,
+                url_mode="play_url",
+                concurrency=1,
+                max_retry=1,
+                chunk_size=1024,
+                proxy=None,
+                persist_and_upload=False,
+            )
+        )
+
+    assert "HTTPStatusError" in str(error.value)
+    diagnostic = json.loads(
+        (project_tmp / "104" / "evidence_failure.json").read_text(encoding="utf-8")
+    )
+    assert diagnostic["request_error_type"] == "HTTPStatusError"
+    assert diagnostic["report"][0]["http_status"] == 403

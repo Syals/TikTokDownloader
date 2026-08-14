@@ -214,44 +214,88 @@ def _client_kwargs(state: AnonymousBootstrap, proxy: str | None) -> dict[str, An
     }
 
 
-def _passes_evidence_gate(
+def _evidence_gate_diagnostics(
     metadata: Sequence[Mapping[str, object]], report: Sequence[Mapping[str, object]]
-) -> bool:
-    if not metadata or not report:
-        return False
-    if not any(
+) -> dict[str, Any]:
+    media_url_count = sum(
         isinstance(item.get("play_url"), str)
         or isinstance(item.get("download_url"), str)
         for item in metadata
-    ):
-        return False
-    first = report[0]
-    if first.get("http_status") != 200 or first.get("json") is not True:
-        return False
-    item_count = first.get("item_count")
-    if not isinstance(item_count, int) or item_count < 1:
-        return False
-    if first.get("has_more"):
-        if len(report) < 2:
-            return False
-        first_hashes = first.get("item_id_hashes", [])
-        first_ids = (
-            {item_id for item_id in first_hashes if isinstance(item_id, str)}
-            if isinstance(first_hashes, list)
-            else set()
-        )
-        later_pages = report[1:]
-        later_ids = {
-            item_id
-            for page in later_pages
-            for hashes in [page.get("item_id_hashes", [])]
-            if isinstance(hashes, list)
-            for item_id in hashes
-            if isinstance(item_id, str)
-        }
-        if not later_ids - first_ids:
-            return False
-    return True
+    )
+    reasons: list[str] = []
+
+    if not metadata:
+        reasons.append("未提取到任何视频元数据")
+    elif not media_url_count:
+        reasons.append("视频元数据中没有 play_url 或 download_url")
+    if not report:
+        reasons.append("未收到直接 HTTP 响应报告")
+    else:
+        first = report[0]
+        http_status = first.get("http_status")
+        if http_status != 200:
+            reasons.append(f"首响应 HTTP 状态={http_status!r}（期望 200）")
+        if first.get("json") is not True:
+            reasons.append("首响应不是可解析的 JSON")
+        item_count = first.get("item_count")
+        if not isinstance(item_count, int) or item_count < 1:
+            reasons.append(f"首响应 item_count={item_count!r}（期望至少 1）")
+        if first.get("has_more"):
+            if len(report) < 2:
+                reasons.append("首响应 has_more=true，但未获得第 2 页响应报告")
+            else:
+                first_hashes = first.get("item_id_hashes", [])
+                first_ids = (
+                    {item_id for item_id in first_hashes if isinstance(item_id, str)}
+                    if isinstance(first_hashes, list)
+                    else set()
+                )
+                later_ids = {
+                    item_id
+                    for page in report[1:]
+                    for hashes in [page.get("item_id_hashes", [])]
+                    if isinstance(hashes, list)
+                    for item_id in hashes
+                    if isinstance(item_id, str)
+                }
+                if not later_ids - first_ids:
+                    reasons.append("翻页响应没有包含相对首屏的新视频 ID")
+
+    return {
+        "metadata_count": len(metadata),
+        "media_url_count": media_url_count,
+        "report": list(report),
+        "reasons": reasons,
+    }
+
+
+def _passes_evidence_gate(
+    metadata: Sequence[Mapping[str, object]], report: Sequence[Mapping[str, object]]
+) -> bool:
+    return not _evidence_gate_diagnostics(metadata, report)["reasons"]
+
+
+def _save_evidence_failure(
+    *,
+    category_type: str,
+    category_name: str | None,
+    category_dir: Path,
+    diagnostics: Mapping[str, object],
+    request_error_type: str | None = None,
+) -> str:
+    diagnostic = {
+        "category_type": category_type,
+        "category_name": category_name,
+        **diagnostics,
+    }
+    if request_error_type:
+        diagnostic["request_error_type"] = request_error_type
+    diagnostic_path = category_dir / "evidence_failure.json"
+    try:
+        save_json(diagnostic_path, diagnostic)
+    except Exception as exc:  # noqa: BLE001
+        return f"诊断报告写入失败: {type(exc).__name__}: {exc}"
+    return f"诊断报告: {diagnostic_path}"
 
 
 async def run_batch(
@@ -273,7 +317,7 @@ async def run_batch(
     persist_and_upload: bool,
     gateway: Any = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-    """串行处理分类；首分类直接 HTTP 重放通过后才允许任何副作用。"""
+    """串行处理分类；首分类通过后才允许采集、下载和数据库副作用。"""
     initial_template = {"params": state.templates[0]}
     next_template = {"params": state.templates[1]}
     all_metadata: list[dict[str, Any]] = []
@@ -287,21 +331,59 @@ async def run_batch(
         category_dir = output_dir / category_type
         try:
             async with httpx.AsyncClient(**_client_kwargs(state, proxy)) as client:
-                metadata, report = await collect_explore(
-                    client,
-                    initial_template=initial_template,
-                    next_template=next_template,
-                    category_type=category_type,
-                    count=count,
-                    max_pages=max_pages,
-                    delay=delay,
-                    cookie=state.cookie,
-                    user_agent=state.user_agent,
-                    initial_pull_type="1",
-                )
-                if index == 0 and not _passes_evidence_gate(metadata, report):
+                try:
+                    metadata, report = await collect_explore(
+                        client,
+                        initial_template=initial_template,
+                        next_template=next_template,
+                        category_type=category_type,
+                        count=count,
+                        max_pages=max_pages,
+                        delay=delay,
+                        cookie=state.cookie,
+                        user_agent=state.user_agent,
+                        initial_pull_type="1",
+                    )
+                except httpx.HTTPError as exc:
+                    if index != 0:
+                        raise
+                    report: list[dict[str, object]] = []
+                    if isinstance(exc, httpx.HTTPStatusError):
+                        response = exc.response
+                        report.append(
+                            {
+                                "http_status": response.status_code,
+                                "json": "application/json"
+                                in response.headers.get("content-type", ""),
+                            }
+                        )
+                    diagnostics = _evidence_gate_diagnostics([], report)
+                    diagnostic_location = _save_evidence_failure(
+                        category_type=category_type,
+                        category_name=category_name,
+                        category_dir=category_dir,
+                        diagnostics=diagnostics,
+                        request_error_type=type(exc).__name__,
+                    )
                     raise AnonymousValidationError(
-                        "validation_failure: 首分类直接 HTTP 证据门失败"
+                        "validation_failure: 首分类直接 HTTP 请求失败: "
+                        + type(exc).__name__
+                        + "；"
+                        + "；".join(diagnostics["reasons"])
+                        + f"；{diagnostic_location}"
+                    ) from exc
+                diagnostics = _evidence_gate_diagnostics(metadata, report)
+                if index == 0 and diagnostics["reasons"]:
+                    diagnostic_location = _save_evidence_failure(
+                        category_type=category_type,
+                        category_name=category_name,
+                        category_dir=category_dir,
+                        diagnostics=diagnostics,
+                    )
+                    raise AnonymousValidationError(
+                        "validation_failure: 首分类直接 HTTP 证据门失败: "
+                        + "；".join(diagnostics["reasons"])
+                        + f"；{diagnostic_location}"
                     )
 
                 for item in metadata:
@@ -597,7 +679,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         save_json(output_dir / "summary.json", summary)
         return 0 if all(item["status"] == "ok" for item in summary.values()) else 1
     except AnonymousValidationError as exc:
-        print(str(exc))
+        print(f"[失败] {exc}")
         return 1
     finally:
         if gateway is not None:
