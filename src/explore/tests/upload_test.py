@@ -18,6 +18,30 @@ def test_build_object_key_unknown_category() -> None:
     assert build_object_key(record, "file.mp4", "base") == "base/unknown/v1/file.mp4"
 
 
+def test_build_object_key_maps_category_to_slug() -> None:
+    record = {"category_type": "104", "video_id": "v1"}
+    assert (
+        build_object_key(record, "file.mp4", "base", {"104": "104-comedy"})
+        == "base/104-comedy/v1/file.mp4"
+    )
+
+
+def test_build_object_key_unmapped_category_falls_back_to_numeric() -> None:
+    record = {"category_type": "999", "video_id": "v1"}
+    assert (
+        build_object_key(record, "file.mp4", "base", {"104": "104-comedy"})
+        == "base/999/v1/file.mp4"
+    )
+
+
+def test_build_object_key_prefix_wins_over_slug_mapping() -> None:
+    record = {"s3_prefix": "custom/prefix", "category_type": "104", "video_id": "v1"}
+    assert (
+        build_object_key(record, "file.mp4", "base", {"104": "104-comedy"})
+        == "custom/prefix/file.mp4"
+    )
+
+
 def test_resolve_local_path_flat_absolute() -> None:
     assert resolve_local_path("/abs/file.mp4", Path("/root"), "119", "flat") == Path(
         "/abs/file.mp4"

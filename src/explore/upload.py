@@ -14,6 +14,7 @@ from typing import Any, Protocol
 
 from loguru import logger
 
+from src.explore.categories import build_category_slug_map
 from src.explore.db import get_tiktok_db_session, init_tiktok_db
 from src.explore.repository import TiktokExploreItemRepository
 
@@ -31,13 +32,22 @@ class _UploadGateway(Protocol):
 
 
 def build_object_key(
-    record: Mapping[str, object], filename: str, key_prefix: str
+    record: Mapping[str, object],
+    filename: str,
+    key_prefix: str,
+    category_slugs: Mapping[str, str] | None = None,
 ) -> str:
-    """构造上传对象 key：优先用条目自带的 s3_prefix，否则按分类+video_id 组织。"""
+    """构造上传对象 key：优先用条目自带的 s3_prefix，否则按分类+video_id 组织。
+
+    分类段优先取 ``category_slugs`` 中的英文 slug（如 ``104-comedy``），
+    未命中或未提供映射时回退数字 ID。
+    """
     prefix = record.get("s3_prefix")
     if isinstance(prefix, str) and prefix.strip():
         return f"{prefix.rstrip('/')}/{filename}"
     category = record.get("category_type") or "unknown"
+    if category_slugs:
+        category = category_slugs.get(str(category), category)
     video_id = record.get("video_id")
     return f"{key_prefix.rstrip('/')}/{category}/{video_id}/{filename}"
 
@@ -84,6 +94,7 @@ async def upload_pending_explore(
     category_type: str | None = None,
     provider: str = "s3",
     key_prefix: str = "tiktok/explore",
+    categories_path: Path | None = None,
     limit: int = 100,
     concurrency: int = 1,
     gateway: _UploadGateway | None = None,
@@ -96,6 +107,9 @@ async def upload_pending_explore(
         category_type: 仅上传指定分类；None 表示不过滤。
         provider: 要消费的 ``s3_provider`` 值。
         key_prefix: S3 key 前缀根。
+        categories_path: 分类映射 JSON 路径，用于把数字分类 ID 映射为
+            英文路径段（如 ``104-comedy``）；None 使用
+            ``Volume/explore_categories.json``。
         limit: 单次最多处理条目数。
         concurrency: 上传并发数；默认为 1（串行）。
         gateway: 可注入的 S3Uploader，便于测试与复用连接；
@@ -107,6 +121,10 @@ async def upload_pending_explore(
     from src.explore.s3 import S3Uploader
 
     await init_tiktok_db()
+
+    category_slugs = build_category_slug_map(categories_path)
+    if not category_slugs:
+        logger.warning("分类映射为空或缺失，S3 路径将使用数字分类目录")
 
     active_gateway: _UploadGateway = gateway or S3Uploader()
     should_close_gateway = gateway is None
@@ -151,7 +169,7 @@ async def upload_pending_explore(
                     logger.warning(f"跳过 {video_id}: 本地文件不存在 {local}")
                     return video_id, "skipped", None
 
-                key = build_object_key(record, local.name, key_prefix)
+                key = build_object_key(record, local.name, key_prefix, category_slugs)
                 async with semaphore:
                     try:
                         ok = await active_gateway.upload_file(
