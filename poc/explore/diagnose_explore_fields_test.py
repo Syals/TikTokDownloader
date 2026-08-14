@@ -7,8 +7,46 @@ from pathlib import Path
 from poc.explore.diagnose_explore_fields import (
     extract_browser_request_params,
     extract_explore_templates,
+    sanitize_cookies,
     save_browser_request_params,
 )
+
+
+def test_sanitize_cookies_keeps_valid_entries() -> None:
+    valid, skipped = sanitize_cookies({"sessionid": "abc", "msToken": " token "})
+
+    assert valid == [
+        {
+            "name": "sessionid",
+            "value": "abc",
+            "domain": ".tiktok.com",
+            "path": "/",
+        },
+        {
+            "name": "msToken",
+            "value": "token",
+            "domain": ".tiktok.com",
+            "path": "/",
+        },
+    ]
+    assert skipped == []
+
+
+def test_sanitize_cookies_skips_invalid_names_and_values() -> None:
+    valid, skipped = sanitize_cookies(
+        {
+            "good": "value",
+            "": "value",
+            " spaced ": "value",
+            "bad_name": 'quote"in',
+            "semi": "a;b",
+            "control": "a\nb",
+            "comma": "a,b",
+        }
+    )
+
+    assert [item.get("name") for item in valid] == ["good", "spaced"]
+    assert skipped == ["", "bad_name", "semi", "control", "comma"]
 
 
 def test_extract_browser_request_params_requires_complete_field_set() -> None:

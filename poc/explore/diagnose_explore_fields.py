@@ -20,6 +20,8 @@
 输出只包含字段长度和少量前导字符，避免泄露完整 cookie/token。
 """
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import hashlib
@@ -27,7 +29,10 @@ import json
 import sys
 from pathlib import Path
 from urllib.parse import parse_qsl, urlsplit
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from playwright._impl._api_structures import SetCookieParam
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -52,6 +57,41 @@ TARGET_FIELDS = (
     REQUIRED_BROWSER_FIELDS + OPTIONAL_BROWSER_FIELDS + ("msToken", "cursor")
 )
 SSR_KEYS = ("__UNIVERSAL_DATA_FOR_REHYDRATION__", "SIGI_STATE", "__NEXT_DATA__")
+
+# Chromium add_cookies 拒绝 name/value 中出现的这些字符。
+INVALID_COOKIE_CHARS = frozenset(';" ,\\')
+CRITICAL_COOKIES = ("sessionid", "msToken")
+
+
+def sanitize_cookies(
+    cookie: dict[str, str],
+) -> tuple[list[SetCookieParam], list[str]]:
+    """过滤 Chromium 无法接受的 cookie 字段。
+
+    返回 ``(可添加的 cookie 列表, 被跳过的名字列表)``。非法条目包括：
+    空 name、含控制字符或 ``;" ,\\\\`` 的 name/value。value 会被去首尾空白。
+    """
+    valid: list[SetCookieParam] = []
+    skipped: list[str] = []
+    for raw_name, raw_value in cookie.items():
+        name = raw_name.strip() if isinstance(raw_name, str) else ""
+        value = raw_value.strip() if isinstance(raw_value, str) else ""
+        invalid = not name or any(
+            ord(char) < 0x20 or ord(char) == 0x7F or char in INVALID_COOKIE_CHARS
+            for char in name + value
+        )
+        if invalid:
+            skipped.append(raw_name if isinstance(raw_name, str) else repr(raw_name))
+            continue
+        valid.append(
+            {
+                "name": name,
+                "value": value,
+                "domain": ".tiktok.com",
+                "path": "/",
+            }
+        )
+    return valid, skipped
 
 
 def truncate(value: str, max_length: int = 10) -> str:
@@ -514,19 +554,36 @@ async def main() -> int:
                 return 2
             print(f"[初始化] 使用 settings.json cookie ({len(cookie)} 个)")
             print(f"[初始化] User-Agent = {truncate(user_agent, 50)}")
+            cookie_list, skipped_cookies = sanitize_cookies(cookie)
+            if skipped_cookies:
+                print(
+                    "[初始化] 警告: 以下 cookie 含非法字符，已跳过 "
+                    f"(共 {len(skipped_cookies)} 个): "
+                    f"{', '.join(skipped_cookies)}"
+                )
+                dropped_critical = [
+                    name for name in skipped_cookies if name in CRITICAL_COOKIES
+                ]
+                if dropped_critical:
+                    print(
+                        f"[致命] 关键 cookie 非法: {', '.join(dropped_critical)}。"
+                        "请重新执行采集步骤（harvest 脚本）刷新 settings.json。"
+                    )
+                    return 2
             browser = await p.chromium.launch(**browser_kwargs)
             context = await browser.new_context(**context_kwargs, user_agent=user_agent)
-            await context.add_cookies(
-                [
-                    {
-                        "name": name,
-                        "value": value,
-                        "domain": ".tiktok.com",
-                        "path": "/",
-                    }
-                    for name, value in cookie.items()
-                ]
-            )
+            try:
+                await context.add_cookies(cookie_list)
+            except Exception:
+                # 兜底：批量失败时逐条定位非法 cookie，跳过无法添加的条目。
+                for item in cookie_list:
+                    try:
+                        await context.add_cookies([item])
+                    except Exception as exc:  # noqa: BLE001
+                        print(
+                            f"[初始化] 警告: cookie[{item.get('name')}] 添加失败，"
+                            f"已跳过: {type(exc).__name__}"
+                        )
             page = await context.new_page()
         else:
             if not PROFILE_DIR.exists():
