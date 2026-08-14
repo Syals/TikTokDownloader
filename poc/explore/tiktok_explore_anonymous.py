@@ -29,6 +29,7 @@ from poc.explore._categories import (  # noqa: E402
     get_category_name,
     list_categories,
     load_category_names,
+    save_category_names,
 )
 from poc.explore._common import (  # noqa: E402
     DEFAULT_CHUNK_KB,
@@ -49,7 +50,7 @@ from poc.explore.tiktok_explore_poc import (  # noqa: E402
     persist_to_db,
     positive_int,
 )
-from poc.session.harvest_tiktok_session import check_egress_country  # noqa: E402
+from poc.session.harvest_tiktok_session import check_egress_country, harvest_categories  # noqa: E402
 
 
 EXPLORE_URL = "https://www.tiktok.com/explore"
@@ -383,6 +384,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--categories", default=None)
     parser.add_argument("--categories-file", type=Path, default=DEFAULT_CATEGORIES_PATH)
     parser.add_argument("--list-categories", action="store_true")
+    parser.add_argument(
+        "--harvest-categories",
+        action="store_true",
+        help="从 TikTok Explore SSR 抓取分类映射并保存到 --categories-file。",
+    )
     parser.add_argument("--config", type=Path, default=None)
     parser.add_argument("--profile", default=None)
     parser.add_argument("--count", type=positive_int, default=None)
@@ -435,6 +441,59 @@ def resolve_config(args: argparse.Namespace, cfg: Mapping[str, Any]) -> dict[str
     return resolved
 
 
+async def harvest_anonymous_categories(
+    *,
+    proxy: str | None,
+    headed: bool,
+    skip_geo: bool,
+    categories_file: Path,
+) -> dict[str, str]:
+    """启动匿名浏览器访问 Explore，从 SSR 提取分类映射并落盘。"""
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError as exc:
+        raise AnonymousValidationError(
+            "未安装 Playwright；请运行 uv sync 与 uv run playwright install chromium"
+        ) from exc
+
+    browser_kwargs: dict[str, Any] = {
+        "headless": not headed,
+        "args": ["--disable-blink-features=AutomationControlled"],
+    }
+    if proxy:
+        browser_kwargs["proxy"] = {"server": proxy}
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(**browser_kwargs)
+        context = await browser.new_context(
+            locale="es-ES",
+            timezone_id="Europe/Madrid",
+            viewport={"width": 1536, "height": 864},
+            service_workers="block",
+        )
+        try:
+            page = await context.new_page()
+            if not skip_geo and not await check_egress_country(page, "ES"):
+                raise AnonymousValidationError("validation_failure: 西班牙出口检查失败")
+
+            await page.goto(EXPLORE_URL, wait_until="domcontentloaded", timeout=60000)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=20000)
+            except Exception:  # noqa: BLE001
+                pass
+            await asyncio.sleep(3)
+
+            categories = await harvest_categories(page)
+            if not categories:
+                raise AnonymousValidationError("未从 Explore SSR 提取到任何分类")
+            path = save_category_names(categories, path=categories_file)
+            print(f"已保存 {len(categories)} 个分类到 {path}")
+            return categories
+        finally:
+            await context.close()
+            await browser.close()
+
+
 def _print_categories(categories_file: Path) -> int:
     names = load_category_names(categories_file)
     if not names:
@@ -463,16 +522,33 @@ def _preflight_storage() -> Any:
     return S3Uploader()
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     try:
         from dotenv import load_dotenv
 
         load_dotenv()
     except ImportError:
         pass
-    args = parse_args()
+    args = parse_args(argv)
     if args.list_categories:
         return _print_categories(args.categories_file)
+    if args.harvest_categories:
+        if not args.live:
+            print("未指定 --live，拒绝联网。")
+            return 2
+        try:
+            asyncio.run(
+                harvest_anonymous_categories(
+                    proxy=args.proxy,
+                    headed=args.headed,
+                    skip_geo=args.skip_geo,
+                    categories_file=args.categories_file,
+                )
+            )
+            return 0
+        except AnonymousValidationError as exc:
+            print(str(exc))
+            return 1
     if not args.live:
         print("未指定 --live，拒绝联网。")
         return 2

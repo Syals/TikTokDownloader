@@ -1,6 +1,7 @@
 """匿名 TikTok Explore 批处理的离线回归测试。"""
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,7 @@ from poc.explore.tiktok_explore_anonymous import (  # noqa: E402
     AnonymousBootstrap,
     AnonymousValidationError,
     _client_kwargs,
+    main,
     parse_args,
     reject_login_cookies,
     resolve_config,
@@ -70,6 +72,62 @@ def test_http_client_preserves_tls_verification_and_shared_proxy() -> None:
     kwargs = _client_kwargs(_bootstrap(), "http://proxy.example:8080")
     assert kwargs["proxy"] == "http://proxy.example:8080"
     assert "verify" not in kwargs
+
+
+def test_harvest_categories_requires_live_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = False
+
+    async def fake_harvest(*_: Any, **__: Any) -> dict[str, str]:
+        nonlocal called
+        called = True
+        return {}
+
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_anonymous.harvest_anonymous_categories",
+        fake_harvest,
+    )
+    assert main(["--harvest-categories"]) == 2
+    assert not called
+
+
+def test_harvest_categories_saves_mapping_to_file(
+    monkeypatch: pytest.MonkeyPatch,
+    project_tmp: Path,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    async def fake_harvest(*_, **kwargs: Any) -> dict[str, str]:
+        captured.update(kwargs)
+        path = kwargs["categories_file"]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps({"100": "Anime & Comics"}, ensure_ascii=False, indent=4),
+            encoding="utf-8",
+        )
+        return {"100": "Anime & Comics"}
+
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_anonymous.harvest_anonymous_categories",
+        fake_harvest,
+    )
+
+    categories_path = project_tmp / "categories.json"
+    assert (
+        main(
+            [
+                "--live",
+                "--harvest-categories",
+                "--categories-file",
+                str(categories_path),
+            ]
+        )
+        == 0
+    )
+    assert captured["categories_file"] == categories_path
+    assert categories_path.is_file()
+    assert "Anime & Comics" in categories_path.read_text(encoding="utf-8")
 
 
 def test_run_batch_deduplicates_media_but_keeps_each_category_metadata(
