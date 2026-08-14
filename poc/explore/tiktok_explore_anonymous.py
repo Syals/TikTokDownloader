@@ -1,13 +1,14 @@
 """匿名 TikTok Explore 批量采集、下载与可选上传。
 
-浏览器仅用于创建一次临时匿名状态并捕获自然 Explore 请求；后续 API 和
-媒体流均通过 HTTPX 完成。任何状态均不会写入磁盘。
+默认使用临时浏览器状态重放 HTTP Explore 请求；--browser-pages 直接消费
+未登录浏览器的 Explore 响应。任何状态均不会写入磁盘。
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
 import sys
@@ -46,6 +47,8 @@ from poc.explore.tiktok_explore_poc import (  # noqa: E402
     REQUIRED_BROWSER_FIELDS,
     collect_explore,
     download_media,
+    extract_explore_pagination,
+    flatten_explore_item,
     nonnegative_float,
     persist_to_db,
     positive_int,
@@ -60,6 +63,7 @@ DEFAULT_MAX_PAGES = 2
 DEFAULT_COUNT = 8
 DEFAULT_DELAY = 2.0
 LOGIN_COOKIE_NAMES = frozenset({"sessionid", "sessionid_ss", "sid_tt"})
+BROWSER_CATEGORY_SELECTOR = 'button[class*="tux-chip__element"]'
 CONFIGURABLE_FIELDS = (
     "categories",
     "count",
@@ -74,6 +78,7 @@ CONFIGURABLE_FIELDS = (
     "no_db",
     "output_dir",
     "proxy",
+    "browser_pages",
 )
 
 
@@ -89,6 +94,16 @@ class AnonymousBootstrap:
     user_agent: str
     browser_request_params: dict[str, str]
     templates: tuple[list[tuple[str, str]], list[tuple[str, str]]]
+
+
+@dataclass
+class BrowserCollection:
+    """一次临时浏览器采集的媒体下载状态与脱敏 Explore 结果。"""
+
+    cookie: dict[str, str]
+    user_agent: str
+    metadata: list[dict[str, Any]]
+    report: list[dict[str, Any]]
 
 
 def save_json(path: Path, data: object) -> None:
@@ -200,7 +215,9 @@ async def bootstrap_anonymous(
             await browser.close()
 
 
-def _client_kwargs(state: AnonymousBootstrap, proxy: str | None) -> dict[str, Any]:
+def _client_kwargs(
+    state: AnonymousBootstrap | BrowserCollection, proxy: str | None
+) -> dict[str, Any]:
     return {
         "headers": {
             "User-Agent": state.user_agent,
@@ -212,6 +229,192 @@ def _client_kwargs(state: AnonymousBootstrap, proxy: str | None) -> dict[str, An
         "timeout": httpx.Timeout(30.0),
         "limits": httpx.Limits(max_connections=50, max_keepalive_connections=10),
     }
+
+
+async def collect_explore_in_browser(
+    *,
+    category_type: str,
+    category_names: Mapping[str, str],
+    max_pages: int,
+    delay: float,
+    proxy: str | None,
+    headed: bool,
+    skip_geo: bool,
+) -> BrowserCollection:
+    """在临时未登录浏览器中选择分类并收集自然 Explore 响应。"""
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError as exc:
+        raise AnonymousValidationError(
+            "未安装 Playwright；请运行 uv sync 与 uv run playwright install chromium"
+        ) from exc
+
+    try:
+        category_index = list(category_names).index(category_type)
+    except ValueError as exc:
+        raise AnonymousValidationError(f"未知分类 ID: {category_type}") from exc
+
+    browser_kwargs: dict[str, Any] = {
+        "headless": not headed,
+        "args": ["--disable-blink-features=AutomationControlled"],
+    }
+    if proxy:
+        browser_kwargs["proxy"] = {"server": proxy}
+
+    captured_pages: list[tuple[dict[str, Any], dict[str, str], int, bool]] = []
+    response_tasks: list[asyncio.Task[None]] = []
+    browser_delay = max(delay, 0.5)
+
+    async def capture_response(response: Any) -> None:
+        if "/api/explore/item_list/" not in response.url:
+            return
+        params = dict(
+            parse_qsl(urlsplit(response.request.url).query, keep_blank_values=True)
+        )
+        if params.get("categoryType") != category_type:
+            return
+        try:
+            payload = await response.json()
+        except Exception:  # noqa: BLE001
+            return
+        if not isinstance(payload, dict) or len(captured_pages) >= max_pages:
+            return
+        captured_pages.append(
+            (
+                payload,
+                params,
+                response.status,
+                bool(response.headers.get("x-ms-token")),
+            )
+        )
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(**browser_kwargs)
+        context = await browser.new_context(
+            locale="es-ES",
+            timezone_id="Europe/Madrid",
+            viewport={"width": 1536, "height": 864},
+            service_workers="block",
+        )
+        try:
+            page = await context.new_page()
+            if not skip_geo and not await check_egress_country(page, "ES"):
+                raise AnonymousValidationError("validation_failure: 西班牙出口检查失败")
+
+            page.on(
+                "response",
+                lambda response: response_tasks.append(
+                    asyncio.create_task(capture_response(response))
+                ),
+            )
+            await page.goto(EXPLORE_URL, wait_until="domcontentloaded", timeout=60000)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=20000)
+            except Exception:  # noqa: BLE001
+                pass
+            await asyncio.sleep(browser_delay)
+
+            consent = page.get_by_role("button", name="Entendido")
+            if await consent.count():
+                await consent.click(force=True)
+                await asyncio.sleep(0.5)
+
+            if category_index:
+                category_buttons = page.locator(BROWSER_CATEGORY_SELECTOR)
+                if category_index >= await category_buttons.count():
+                    raise AnonymousValidationError(
+                        f"分类 {category_type} 未出现在当前 Explore 分类栏中"
+                    )
+                category_button = category_buttons.nth(category_index)
+                interaction = category_button.locator(
+                    '[data-testid="tux-web-interaction-container"]'
+                )
+                if await interaction.count():
+                    await interaction.click(force=True)
+                else:
+                    await category_button.click(force=True)
+                await asyncio.sleep(browser_delay)
+
+            for _ in range(max_pages * 3):
+                if len(captured_pages) >= max_pages:
+                    break
+                # Explore advances its infinite list from wheel events, not repeated bottom jumps.
+                await page.mouse.wheel(0, 900)
+                await asyncio.sleep(browser_delay)
+            await asyncio.sleep(browser_delay)
+            if response_tasks:
+                await asyncio.gather(*response_tasks, return_exceptions=True)
+
+            cookies = await context.cookies()
+            reject_login_cookies(cookies)
+            cookie = {
+                str(item.get("name")): str(item.get("value"))
+                for item in cookies
+                if isinstance(item.get("name"), str)
+                and isinstance(item.get("value"), str)
+            }
+            user_agent = await page.evaluate("() => navigator.userAgent")
+        finally:
+            await context.close()
+            await browser.close()
+
+    if not captured_pages:
+        raise AnonymousValidationError(
+            f"validation_failure: 未捕获分类 {category_type} 的 Explore 浏览器响应"
+        )
+
+    seen_video_ids: set[str] = set()
+    metadata: list[dict[str, Any]] = []
+    report: list[dict[str, Any]] = []
+    for page_number, (payload, params, status, received_ms_token) in enumerate(
+        captured_pages, start=1
+    ):
+        item_list = payload.get("itemList")
+        item_list_missing = not isinstance(item_list, list)
+        items = (
+            [item for item in item_list if isinstance(item, dict)]
+            if not item_list_missing
+            else []
+        )
+        flattened_items = [flatten_explore_item(item, category_type) for item in items]
+        item_ids = [item["id"] for item in items if isinstance(item.get("id"), str)]
+        next_cursor, has_more = extract_explore_pagination(payload, "")
+        report.append(
+            {
+                "source": "browser",
+                "pull_type": params.get("pullType", "?"),
+                "http_status": status,
+                "json": True,
+                "request_field_names": list(params),
+                "request_cursor_present": "cursor" in params,
+                "request_ms_token_present": "msToken" in params,
+                "item_count": len(items),
+                "item_id_hashes": [
+                    hashlib.sha256(item_id.encode()).hexdigest()[:12]
+                    for item_id in item_ids
+                ],
+                "media_url_count": sum(
+                    bool(item.get("play_url") or item.get("download_url"))
+                    for item in flattened_items
+                ),
+                "has_more": has_more,
+                "cursor_sha256": hashlib.sha256(next_cursor.encode()).hexdigest()[:12],
+                "received_ms_token": received_ms_token,
+                "page": page_number,
+                "item_list_missing": item_list_missing,
+            }
+        )
+        for item in flattened_items:
+            if isinstance(item.get("id"), str) and item["id"] not in seen_video_ids:
+                seen_video_ids.add(item["id"])
+                metadata.append(item)
+
+    return BrowserCollection(
+        cookie=cookie,
+        user_agent=user_agent,
+        metadata=metadata,
+        report=report,
+    )
 
 
 def _evidence_gate_diagnostics(
@@ -229,7 +432,7 @@ def _evidence_gate_diagnostics(
     elif not media_url_count:
         reasons.append("视频元数据中没有 play_url 或 download_url")
     if not report:
-        reasons.append("未收到直接 HTTP 响应报告")
+        reasons.append("未收到 Explore 响应报告")
     else:
         first = report[0]
         http_status = first.get("http_status")
@@ -302,7 +505,7 @@ async def run_batch(
     *,
     categories: Sequence[str],
     category_names: Mapping[str, str],
-    state: AnonymousBootstrap,
+    state: AnonymousBootstrap | None,
     count: int,
     max_pages: int,
     delay: float,
@@ -316,10 +519,13 @@ async def run_batch(
     proxy: str | None,
     persist_and_upload: bool,
     gateway: Any = None,
+    browser_pages: bool = False,
+    headed: bool = False,
+    skip_geo: bool = False,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """串行处理分类；首分类通过后才允许采集、下载和数据库副作用。"""
-    initial_template = {"params": state.templates[0]}
-    next_template = {"params": state.templates[1]}
+    initial_template = {"params": state.templates[0]} if state else {}
+    next_template = {"params": state.templates[1]} if state else {}
     all_metadata: list[dict[str, Any]] = []
     all_manifest: list[dict[str, Any]] = []
     summary: dict[str, Any] = {}
@@ -330,48 +536,70 @@ async def run_batch(
         category_name = get_category_name(category_type, category_names)
         category_dir = output_dir / category_type
         try:
-            async with httpx.AsyncClient(**_client_kwargs(state, proxy)) as client:
-                try:
-                    metadata, report = await collect_explore(
-                        client,
-                        initial_template=initial_template,
-                        next_template=next_template,
-                        category_type=category_type,
-                        count=count,
-                        max_pages=max_pages,
-                        delay=delay,
-                        cookie=state.cookie,
-                        user_agent=state.user_agent,
-                        initial_pull_type="1",
-                    )
-                except httpx.HTTPError as exc:
-                    if index != 0:
-                        raise
-                    report: list[dict[str, object]] = []
-                    if isinstance(exc, httpx.HTTPStatusError):
-                        response = exc.response
-                        report.append(
-                            {
-                                "http_status": response.status_code,
-                                "json": "application/json"
-                                in response.headers.get("content-type", ""),
-                            }
+            metadata: list[dict[str, Any]] = []
+            report: list[dict[str, Any]] = []
+            if browser_pages:
+                collection = await collect_explore_in_browser(
+                    category_type=category_type,
+                    category_names=category_names,
+                    max_pages=max_pages,
+                    delay=delay,
+                    proxy=proxy,
+                    headed=headed,
+                    skip_geo=skip_geo,
+                )
+                active_state: AnonymousBootstrap | BrowserCollection = collection
+                metadata, report = collection.metadata, collection.report
+            else:
+                if state is None:
+                    raise AnonymousValidationError("缺少 HTTP 重放所需的匿名浏览器状态")
+                active_state = state
+
+            async with httpx.AsyncClient(
+                **_client_kwargs(active_state, proxy)
+            ) as client:
+                if not browser_pages:
+                    try:
+                        metadata, report = await collect_explore(
+                            client,
+                            initial_template=initial_template,
+                            next_template=next_template,
+                            category_type=category_type,
+                            count=count,
+                            max_pages=max_pages,
+                            delay=delay,
+                            cookie=active_state.cookie,
+                            user_agent=active_state.user_agent,
+                            initial_pull_type="1",
                         )
-                    diagnostics = _evidence_gate_diagnostics([], report)
-                    diagnostic_location = _save_evidence_failure(
-                        category_type=category_type,
-                        category_name=category_name,
-                        category_dir=category_dir,
-                        diagnostics=diagnostics,
-                        request_error_type=type(exc).__name__,
-                    )
-                    raise AnonymousValidationError(
-                        "validation_failure: 首分类直接 HTTP 请求失败: "
-                        + type(exc).__name__
-                        + "；"
-                        + "；".join(diagnostics["reasons"])
-                        + f"；{diagnostic_location}"
-                    ) from exc
+                    except httpx.HTTPError as exc:
+                        if index != 0:
+                            raise
+                        report = []
+                        if isinstance(exc, httpx.HTTPStatusError):
+                            response = exc.response
+                            report.append(
+                                {
+                                    "http_status": response.status_code,
+                                    "json": "application/json"
+                                    in response.headers.get("content-type", ""),
+                                }
+                            )
+                        diagnostics = _evidence_gate_diagnostics([], report)
+                        diagnostic_location = _save_evidence_failure(
+                            category_type=category_type,
+                            category_name=category_name,
+                            category_dir=category_dir,
+                            diagnostics=diagnostics,
+                            request_error_type=type(exc).__name__,
+                        )
+                        raise AnonymousValidationError(
+                            "validation_failure: 首分类直接 HTTP 请求失败: "
+                            + type(exc).__name__
+                            + "；"
+                            + "；".join(diagnostics["reasons"])
+                            + f"；{diagnostic_location}"
+                        ) from exc
                 diagnostics = _evidence_gate_diagnostics(metadata, report)
                 if index == 0 and diagnostics["reasons"]:
                     diagnostic_location = _save_evidence_failure(
@@ -381,7 +609,7 @@ async def run_batch(
                         diagnostics=diagnostics,
                     )
                     raise AnonymousValidationError(
-                        "validation_failure: 首分类直接 HTTP 证据门失败: "
+                        "validation_failure: 首分类 Explore 证据门失败: "
                         + "；".join(diagnostics["reasons"])
                         + f"；{diagnostic_location}"
                     )
@@ -406,7 +634,7 @@ async def run_batch(
                         concurrency=concurrency,
                         max_retry=max_retry,
                         chunk_size=chunk_size,
-                        user_agent=state.user_agent,
+                        user_agent=active_state.user_agent,
                     )
 
             save_json(category_dir / "metadata.json", metadata)
@@ -486,6 +714,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--headed", action="store_true")
     parser.add_argument("--skip-geo", action="store_true")
     parser.add_argument(
+        "--browser-pages",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="在未登录浏览器中直接采集 Explore 响应，而非 HTTP 重放。",
+    )
+    parser.add_argument(
         "--download", action=argparse.BooleanOptionalAction, default=None
     )
     db_group = parser.add_mutually_exclusive_group()
@@ -509,6 +743,7 @@ def resolve_config(args: argparse.Namespace, cfg: Mapping[str, Any]) -> dict[str
         "no_db": True,
         "output_dir": str(DEFAULT_OUTPUT_DIR),
         "proxy": None,
+        "browser_pages": False,
     }
     resolved = {
         name: getattr(args, name)
@@ -648,9 +883,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if not resolved["no_db"]:
             gateway = _preflight_storage()
-        state = asyncio.run(
-            bootstrap_anonymous(
-                proxy=resolved["proxy"], headed=args.headed, skip_geo=args.skip_geo
+        state = (
+            None
+            if resolved["browser_pages"]
+            else asyncio.run(
+                bootstrap_anonymous(
+                    proxy=resolved["proxy"],
+                    headed=args.headed,
+                    skip_geo=args.skip_geo,
+                )
             )
         )
         metadata, manifest, summary = asyncio.run(
@@ -671,6 +912,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 proxy=resolved["proxy"],
                 persist_and_upload=not resolved["no_db"],
                 gateway=gateway,
+                browser_pages=resolved["browser_pages"],
+                headed=args.headed,
+                skip_geo=args.skip_geo,
             )
         )
         output_dir = Path(resolved["output_dir"])

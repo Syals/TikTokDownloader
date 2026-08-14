@@ -55,6 +55,7 @@ import asyncio
 import json
 import re
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -89,17 +90,18 @@ SPAIN_LOCKED_PARAMS = {
     "priority_region": "ES",
     "tz_name": "Europe/Madrid",
 }
+LOGIN_COOKIE_NAMES = frozenset({"sessionid", "sessionid_ss", "sid_tt"})
 
 
-def load_settings() -> dict:
-    if not SETTINGS_PATH.exists():
-        print(f"[致命] 未在 {SETTINGS_PATH} 找到 settings.json")
-        raise SystemExit(2)
-    return json.loads(SETTINGS_PATH.read_text(encoding="utf-8-sig"))
+def load_settings(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8-sig"))
 
 
-def save_settings(settings: dict) -> None:
-    SETTINGS_PATH.write_text(
+def save_settings(path: Path, settings: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
         json.dumps(settings, ensure_ascii=False, indent=4),
         encoding="utf-8",
     )
@@ -250,8 +252,10 @@ async def harvest(context, page) -> dict:
     }
 
 
-def merge_into_settings(settings: dict, data: dict) -> dict:
-    cookie_tiktok = settings.get("cookie_tiktok")
+def merge_into_settings(
+    settings: dict, data: dict, *, replace_cookies: bool = False
+) -> dict:
+    cookie_tiktok = {} if replace_cookies else settings.get("cookie_tiktok")
     if not isinstance(cookie_tiktok, dict):
         cookie_tiktok = {}
     cookie_tiktok.update(data["cookie"])
@@ -278,6 +282,10 @@ def merge_into_settings(settings: dict, data: dict) -> dict:
     return settings
 
 
+def login_cookie_names(cookies: Mapping[str, str]) -> list[str]:
+    return sorted(name for name in cookies if name.lower() in LOGIN_COOKIE_NAMES)
+
+
 def report(data: dict) -> None:
     print("\n" + "=" * 60)
     print("[采集结果]")
@@ -297,8 +305,8 @@ def report(data: dict) -> None:
         print("  注意: 未找到 device_id (wid)；页面可能被拦截。")
     if not has_session:
         print(
-            "  注意: 没有 sessionid -> 未登录。请先带 --login 运行一次，"
-            "在持久化配置内登录后再重新运行。"
+            "  注意: 没有 sessionid -> 未登录。可用 --require-logged-out "
+            "将此状态保存为隔离的无登录会话。"
         )
 
 
@@ -311,10 +319,16 @@ async def main() -> int:
         default=None,
         help="西班牙代理 URL，例如 http://127.0.0.1:7890（Clash/mihomo）。",
     )
-    parser.add_argument(
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
         "--login",
         action="store_true",
         help="有头运行并暂停以供手动登录 TikTok，随后退出。",
+    )
+    mode_group.add_argument(
+        "--require-logged-out",
+        action="store_true",
+        help="拒绝登录 Cookie，并以捕获的 Cookie 覆盖 settings 中的旧会话。",
     )
     parser.add_argument(
         "--headed",
@@ -325,6 +339,18 @@ async def main() -> int:
         "--skip-geo",
         action="store_true",
         help="跳过西班牙出口 IP 检查。",
+    )
+    parser.add_argument(
+        "--profile-dir",
+        type=Path,
+        default=PROFILE_DIR,
+        help="Chromium 持久化 profile 路径。",
+    )
+    parser.add_argument(
+        "--settings",
+        type=Path,
+        default=SETTINGS_PATH,
+        help="写入浏览器会话的 settings JSON 路径。",
     )
     args = parser.parse_args()
 
@@ -338,7 +364,7 @@ async def main() -> int:
         )
         return 2
 
-    PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+    args.profile_dir.mkdir(parents=True, exist_ok=True)
     headless = not (args.login or args.headed)
     launch_kwargs: dict = {
         "headless": headless,
@@ -359,12 +385,12 @@ async def main() -> int:
             "[初始化] 警告: 未提供 --proxy。若主机当前未经由西班牙出口，"
             "TikTok 内容将不是西班牙语。"
         )
-    print(f"[初始化] profile = {PROFILE_DIR}")
+    print(f"[初始化] profile = {args.profile_dir}")
     print(f"[初始化] headless = {headless}")
 
     async with async_playwright() as p:
         context = await p.chromium.launch_persistent_context(
-            str(PROFILE_DIR),
+            str(args.profile_dir),
             **launch_kwargs,
         )
         page = context.pages[0] if context.pages else await context.new_page()
@@ -390,14 +416,20 @@ async def main() -> int:
 
             data = await harvest(context, page)
             report(data)
+            if args.require_logged_out:
+                if names := login_cookie_names(data["cookie"]):
+                    print("\n[中止] profile 包含登录 Cookie: " + ", ".join(names))
+                    return 1
             if not data["device_id"] and "sessionid" not in data["cookie"]:
                 print("\n[中止] 未采集到有用信息（被拦截 / 未登录）。")
                 return 1
 
-            settings = load_settings()
-            settings = merge_into_settings(settings, data)
-            save_settings(settings)
-            print(f"\n[完成] 已合并进 {SETTINGS_PATH}")
+            settings = load_settings(args.settings)
+            settings = merge_into_settings(
+                settings, data, replace_cookies=args.require_logged_out
+            )
+            save_settings(args.settings, settings)
+            print(f"\n[完成] 已合并进 {args.settings}")
             print(
                 "     已保留的西班牙参数: "
                 + ", ".join(f"{k}={v}" for k, v in SPAIN_LOCKED_PARAMS.items())

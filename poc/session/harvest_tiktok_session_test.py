@@ -13,6 +13,8 @@ from poc.explore._categories import (  # noqa: E402
 )
 from poc.session.harvest_tiktok_session import (  # noqa: E402
     extract_ssr_json,
+    login_cookie_names,
+    merge_into_settings,
 )
 
 SSR_SCRIPT_TAG = (
@@ -51,3 +53,28 @@ def test_html_to_categories_end_to_end() -> None:
     }
     found = find_explore_categories(extract_ssr_json(build_html(ssr)))
     assert merge_explore_categories(found) == {"112": "Sports"}
+
+
+def test_merge_into_settings_replaces_stale_login_cookies_when_logged_out() -> None:
+    settings = {"cookie_tiktok": {"sessionid": "stale", "ttwid": "old"}}
+    data = {
+        "cookie": {"msToken": "fresh", "ttwid": "new"},
+        "User-Agent": "Mozilla/5.0",
+        "browser_platform": "Win32",
+        "browser_language": "es",
+        "browser_version": "141.0.0.0",
+        "os": "windows",
+        "screen_width": "1920",
+        "screen_height": "1080",
+        "device_id": "1234567890123456789",
+    }
+
+    merged = merge_into_settings(settings, data, replace_cookies=True)
+
+    assert merged["cookie_tiktok"] == {"msToken": "fresh", "ttwid": "new"}
+
+
+def test_login_cookie_names_includes_all_supported_login_cookies() -> None:
+    assert login_cookie_names(
+        {"msToken": "ephemeral", "sessionid_ss": "logged-in", "sid_tt": "logged-in"}
+    ) == ["sessionid_ss", "sid_tt"]

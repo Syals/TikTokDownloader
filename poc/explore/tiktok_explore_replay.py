@@ -201,12 +201,8 @@ def load_session(settings_path: Path) -> tuple[dict[str, str], str]:
         raise ValueError("缺少 TikTok 会话配置")
     session = {str(name): str(value) for name, value in cookie.items()}
     user_agent = browser_info.get("User-Agent")
-    if (
-        not session.get("sessionid")
-        or not isinstance(user_agent, str)
-        or not user_agent
-    ):
-        raise ValueError("缺少 TikTok sessionid 或 User-Agent")
+    if not session.get("msToken") or not isinstance(user_agent, str) or not user_agent:
+        raise ValueError("缺少 TikTok msToken 或 User-Agent")
     return session, user_agent
 
 

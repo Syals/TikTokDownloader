@@ -15,6 +15,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from poc.explore.tiktok_explore_anonymous import (  # noqa: E402
     AnonymousBootstrap,
     AnonymousValidationError,
+    BrowserCollection,
     _client_kwargs,
     _evidence_gate_diagnostics,
     main,
@@ -65,6 +66,8 @@ def test_resolve_config_defaults_to_no_db_and_rejects_all_urls() -> None:
     resolved = resolve_config(parse_args([]), {})
     assert resolved["no_db"] is True
     assert resolved["url_mode"] == "play_url"
+    assert resolved["browser_pages"] is False
+    assert resolve_config(parse_args(["--browser-pages"]), {})["browser_pages"] is True
 
     with pytest.raises(AnonymousValidationError, match="一条 media_path"):
         resolve_config(parse_args(["--url-mode", "all"]), {})
@@ -253,6 +256,67 @@ def test_run_batch_deduplicates_media_but_keeps_each_category_metadata(
     assert summary["112"]["duplicates"] == 1
     assert (project_tmp / "112" / "metadata.json").is_file()
     assert (project_tmp / "112" / "download_manifest.json").is_file()
+
+
+def test_run_batch_uses_browser_collection_when_enabled(
+    monkeypatch: pytest.MonkeyPatch, project_tmp: Path
+) -> None:
+    async def fake_browser_collection(*_: Any, **__: Any) -> BrowserCollection:
+        return BrowserCollection(
+            cookie={"msToken": "ephemeral"},
+            user_agent="test-agent",
+            metadata=[
+                {
+                    "id": "browser-video",
+                    "category_type": "104",
+                    "play_url": "https://cdn.example/browser-video.mp4",
+                }
+            ],
+            report=[
+                {
+                    "http_status": 200,
+                    "json": True,
+                    "item_count": 1,
+                    "has_more": False,
+                }
+            ],
+        )
+
+    async def unexpected_http_collection(*_: Any, **__: Any) -> None:
+        raise AssertionError("browser mode must not use HTTP pagination")
+
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_anonymous.collect_explore_in_browser",
+        fake_browser_collection,
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_anonymous.collect_explore",
+        unexpected_http_collection,
+    )
+
+    metadata, _, summary = asyncio.run(
+        run_batch(
+            categories=["104"],
+            category_names={"104": "One"},
+            state=None,
+            count=8,
+            max_pages=3,
+            delay=0,
+            category_delay=0,
+            output_dir=project_tmp,
+            download=False,
+            url_mode="play_url",
+            concurrency=1,
+            max_retry=1,
+            chunk_size=1024,
+            proxy=None,
+            persist_and_upload=False,
+            browser_pages=True,
+        )
+    )
+
+    assert [item["id"] for item in metadata] == ["browser-video"]
+    assert summary["104"]["pages"] == 1
 
 
 def test_run_batch_blocks_side_effects_when_evidence_gate_fails(
