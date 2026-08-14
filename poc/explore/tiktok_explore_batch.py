@@ -85,6 +85,20 @@ def parse_categories(text: str) -> list[str]:
     return unique
 
 
+def expand_categories(
+    parsed: Sequence[str],
+    names: Mapping[str, str],
+) -> list[str] | None:
+    """``all`` 通配符展开为本地分类映射的全部 ID（升序）。
+
+    返回 ``None`` 表示未使用通配符，调用方走原有逐项校验路径；
+    使用了通配符但映射为空时返回 ``[]``，由调用方报错。
+    """
+    if parsed != ["all"]:
+        return None
+    return [category_id for category_id, _ in list_categories(names)]
+
+
 def save_json(path: Path, data: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -399,16 +413,22 @@ def main() -> int:
 
     category_names = load_category_names(args.categories_file)
     categories = parse_categories(resolved["categories"])
+    expanded = expand_categories(categories, category_names)
+    if expanded is not None:
+        categories = expanded
     if not categories:
         print("错误: --categories 为空。")
         _print_category_help(category_names)
         return 2
 
-    unknown = [category for category in categories if category not in category_names]
-    if unknown:
-        print("错误: 以下分类 ID 不在已知映射列表中: " + ", ".join(unknown))
-        _print_category_help(category_names)
-        return 2
+    if expanded is None:
+        unknown = [
+            category for category in categories if category not in category_names
+        ]
+        if unknown:
+            print("错误: 以下分类 ID 不在已知映射列表中: " + ", ".join(unknown))
+            _print_category_help(category_names)
+            return 2
 
     try:
         cookie, user_agent = load_session(args.settings)

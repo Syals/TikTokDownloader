@@ -28,6 +28,7 @@ from poc.explore.tiktok_explore_batch import (  # noqa: E402
     DEFAULT_MAX_RETRY,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_CHUNK_KB,
+    expand_categories,
     main,
     parse_args,
     parse_categories,
@@ -49,6 +50,20 @@ from poc.explore.tiktok_explore_batch import (  # noqa: E402
 )
 def test_parse_categories(text: str, expected: list[str]) -> None:
     assert parse_categories(text) == expected
+
+
+def test_expand_categories_all_returns_sorted_ids() -> None:
+    names = {"120": "Music", "100": "Comedy", "112": "Sports"}
+    assert expand_categories(["all"], names) == ["100", "112", "120"]
+
+
+def test_expand_categories_all_with_empty_mapping() -> None:
+    assert expand_categories(["all"], {}) == []
+
+
+def test_expand_categories_passthrough_non_wildcard() -> None:
+    assert expand_categories(["119", "120"], {"119": "X"}) is None
+    assert expand_categories(["all", "120"], {"120": "X"}) is None
 
 
 def test_parse_args_default_sentinels() -> None:
