@@ -4,9 +4,11 @@ import asyncio
 import json
 import sys
 import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -16,6 +18,7 @@ from poc.explore._batch_config import (  # noqa: E402
     load_batch_config,
 )
 from poc.explore._categories import (  # noqa: E402
+    load_category_names,
     save_category_names,
 )
 from poc.explore.tiktok_explore_batch import (  # noqa: E402
@@ -23,6 +26,7 @@ from poc.explore.tiktok_explore_batch import (  # noqa: E402
     DEFAULT_CATEGORY_DELAY,
     DEFAULT_CONCURRENCY,
     DEFAULT_COUNT,
+    DEFAULT_CATEGORIES_TTL_HOURS,
     DEFAULT_DELAY,
     DEFAULT_DISK_USED_PERCENT,
     DEFAULT_MAX_PAGES,
@@ -30,11 +34,16 @@ from poc.explore.tiktok_explore_batch import (  # noqa: E402
     DEFAULT_MIN_FREE_GB,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_CHUNK_KB,
+    CategoryRefreshError,
     _collect_stop_reason,
+    categories_need_refresh,
     expand_categories,
     main,
+    maybe_refresh_categories,
     parse_args,
     parse_categories,
+    parse_categories_from_html,
+    refresh_categories_via_http,
     resolve_config,
     run_batch,
     save_json,
@@ -208,6 +217,258 @@ def test_resolve_config_disk_thresholds_merge() -> None:
     assert resolved["min_free_gb"] == 12.0
 
 
+def _rehydration_html(payload: dict[str, Any]) -> str:
+    return (
+        '<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">'
+        + json.dumps(payload, ensure_ascii=False)
+        + "</script>"
+    )
+
+
+SSR_CATEGORIES_PAYLOAD: dict[str, Any] = {
+    "__DEFAULT_SCOPE__": {
+        "webapp.explore": {
+            "exploreCategoryList": {
+                "v0": [
+                    {"text": "all", "name": "All", "type": "120"},
+                    {"text": "comedy", "name": "Comedy", "type": "104"},
+                ]
+            }
+        }
+    }
+}
+
+
+def test_parse_categories_from_html_extracts_mapping() -> None:
+    html = _rehydration_html(SSR_CATEGORIES_PAYLOAD)
+    assert parse_categories_from_html(html) == {
+        "120": "All",
+        "104": "Comedy",
+    }
+
+
+@pytest.mark.parametrize(
+    "html",
+    [
+        "<html>no ssr here</html>",
+        _rehydration_html({"__DEFAULT_SCOPE__": {"webapp.explore": {}}}),
+        _rehydration_html(
+            {"__DEFAULT_SCOPE__": {"webapp.explore": {"exploreCategoryList": {}}}}
+        ),
+    ],
+)
+def test_parse_categories_from_html_rejects_invalid(html: str) -> None:
+    with pytest.raises(CategoryRefreshError):
+        parse_categories_from_html(html)
+
+
+def test_refresh_categories_via_http_parses_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/explore"
+        return httpx.Response(200, text=_rehydration_html(SSR_CATEGORIES_PAYLOAD))
+
+    categories = asyncio.run(
+        refresh_categories_via_http(
+            proxy=None,
+            user_agent="test-ua",
+            transport=httpx.MockTransport(handler),
+        )
+    )
+    assert categories == {"120": "All", "104": "Comedy"}
+
+
+def test_refresh_categories_via_http_rejects_non_200() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403, text="forbidden")
+
+    with pytest.raises(CategoryRefreshError, match="403"):
+        asyncio.run(
+            refresh_categories_via_http(
+                proxy=None,
+                user_agent="test-ua",
+                transport=httpx.MockTransport(handler),
+            )
+        )
+
+
+def test_categories_need_refresh_matrix(project_tmp: Path) -> None:
+    path = project_tmp / "categories.json"
+    ttl = DEFAULT_CATEGORIES_TTL_HOURS
+    # 映射缺失 → 刷新。
+    assert categories_need_refresh(path, ttl_hours=ttl, force=False, disabled=False)
+    # 禁用优先，不做任何检查。
+    assert not categories_need_refresh(path, ttl_hours=ttl, force=True, disabled=True)
+
+    save_category_names({"120": "All"}, path=path)
+    # 新鲜 → 不刷新；强制 → 刷新。
+    assert not categories_need_refresh(path, ttl_hours=ttl, force=False, disabled=False)
+    assert categories_need_refresh(path, ttl_hours=ttl, force=True, disabled=False)
+
+    # 元数据缺失（手工构造的映射）→ 视为过期。
+    path.write_text(json.dumps({"120": "All"}), encoding="utf-8")
+    assert categories_need_refresh(path, ttl_hours=ttl, force=False, disabled=False)
+
+    # harvested_at 超过 TTL → 刷新；无时区的旧时间戳同样可比较。
+    stale_cases = (
+        (datetime.now(timezone.utc) - timedelta(hours=ttl + 1)).isoformat(),
+        (datetime.now(timezone.utc) - timedelta(hours=ttl + 1))
+        .replace(tzinfo=None)
+        .isoformat(),
+    )
+    for stale in stale_cases:
+        payload = {"_meta": {"harvested_at": stale}, "120": "All"}
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        assert categories_need_refresh(path, ttl_hours=ttl, force=False, disabled=False)
+
+
+def test_maybe_refresh_fresh_skips_network(
+    monkeypatch: pytest.MonkeyPatch, project_tmp: Path
+) -> None:
+    path = project_tmp / "categories.json"
+    save_category_names({"120": "All"}, path=path)
+
+    async def fail_http(**kwargs: Any) -> dict[str, str]:
+        raise AssertionError("不应触网")
+
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.refresh_categories_via_http", fail_http
+    )
+    state = asyncio.run(
+        maybe_refresh_categories(
+            categories_file=path,
+            proxy=None,
+            force=False,
+            disabled=False,
+            settings_path=project_tmp / "settings.json",
+        )
+    )
+    assert state == "fresh"
+
+
+def test_maybe_refresh_http_success_persists(
+    monkeypatch: pytest.MonkeyPatch, project_tmp: Path
+) -> None:
+    path = project_tmp / "categories.json"
+
+    async def fake_http(**kwargs: Any) -> dict[str, str]:
+        return {"120": "All", "104": "Comedy"}
+
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.refresh_categories_via_http", fake_http
+    )
+    state = asyncio.run(
+        maybe_refresh_categories(
+            categories_file=path,
+            proxy=None,
+            force=True,
+            disabled=False,
+            settings_path=project_tmp / "settings.json",
+        )
+    )
+    assert state == "refreshed_http"
+    assert load_category_names(path) == {"120": "All", "104": "Comedy"}
+
+
+def test_maybe_refresh_browser_fallback(
+    monkeypatch: pytest.MonkeyPatch, project_tmp: Path
+) -> None:
+    path = project_tmp / "categories.json"
+
+    async def fail_http(**kwargs: Any) -> dict[str, str]:
+        raise CategoryRefreshError("network down")
+
+    async def fake_browser(**kwargs: Any) -> dict[str, str]:
+        return {"112": "Sports"}
+
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.refresh_categories_via_http", fail_http
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.refresh_categories_via_browser",
+        fake_browser,
+    )
+    state = asyncio.run(
+        maybe_refresh_categories(
+            categories_file=path,
+            proxy=None,
+            force=True,
+            disabled=False,
+            settings_path=project_tmp / "settings.json",
+        )
+    )
+    assert state == "refreshed_browser"
+
+
+def test_maybe_refresh_failure_degrades_to_local(
+    monkeypatch: pytest.MonkeyPatch, project_tmp: Path
+) -> None:
+    path = project_tmp / "categories.json"
+    save_category_names({"120": "All"}, path=path)
+
+    async def fail_http(**kwargs: Any) -> dict[str, str]:
+        raise CategoryRefreshError("network down")
+
+    async def fail_browser(**kwargs: Any) -> dict[str, str]:
+        raise RuntimeError("no playwright")
+
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.refresh_categories_via_http", fail_http
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.refresh_categories_via_browser",
+        fail_browser,
+    )
+    state = asyncio.run(
+        maybe_refresh_categories(
+            categories_file=path,
+            proxy=None,
+            force=True,
+            disabled=False,
+            settings_path=project_tmp / "settings.json",
+        )
+    )
+    assert state == "kept_local_after_failure"
+
+
+def test_maybe_refresh_failure_without_local_fails(
+    monkeypatch: pytest.MonkeyPatch, project_tmp: Path
+) -> None:
+    async def fail_http(**kwargs: Any) -> dict[str, str]:
+        raise CategoryRefreshError("network down")
+
+    async def fail_browser(**kwargs: Any) -> dict[str, str]:
+        raise RuntimeError("no playwright")
+
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.refresh_categories_via_http", fail_http
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.refresh_categories_via_browser",
+        fail_browser,
+    )
+    state = asyncio.run(
+        maybe_refresh_categories(
+            categories_file=project_tmp / "missing.json",
+            proxy=None,
+            force=True,
+            disabled=False,
+            settings_path=project_tmp / "settings.json",
+        )
+    )
+    assert state == "failed_no_local"
+
+
+def test_parse_args_refresh_flags() -> None:
+    args = parse_args(["--live", "--refresh-categories", "--categories", "104"])
+    assert args.refresh_categories is True
+    assert args.no_refresh_categories is False
+    args = parse_args(["--live", "--no-refresh-categories"])
+    assert args.refresh_categories is False
+    assert args.no_refresh_categories is True
+    with pytest.raises(SystemExit):
+        parse_args(["--live", "--refresh-categories", "--no-refresh-categories"])
+
+
 def test_main_list_categories_missing_file_exit_2(
     monkeypatch: pytest.MonkeyPatch, project_tmp: Path
 ) -> None:
@@ -238,6 +499,36 @@ def test_main_list_categories_prints_mapping(
     assert "Sports" in capsys.readouterr().out
 
 
+def test_main_list_categories_live_refreshes_first(
+    monkeypatch: pytest.MonkeyPatch, project_tmp: Path, capsys: pytest.CaptureFixture
+) -> None:
+    categories_path = project_tmp / "categories.json"
+    save_category_names({"112": "Sports"}, path=categories_path)
+    seen: dict[str, Any] = {}
+
+    async def fake_refresh(**kwargs: Any) -> str:
+        seen.update(kwargs)
+        return "refreshed_http"
+
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.maybe_refresh_categories", fake_refresh
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "prog",
+            "--list-categories",
+            "--live",
+            "--categories-file",
+            str(categories_path),
+        ],
+    )
+    assert main() == 0
+    assert seen["categories_file"] == categories_path
+    assert "Sports" in capsys.readouterr().out
+
+
 def test_main_unknown_category_exit_2(
     monkeypatch: pytest.MonkeyPatch, project_tmp: Path
 ) -> None:
@@ -246,7 +537,15 @@ def test_main_unknown_category_exit_2(
     monkeypatch.setattr(
         sys,
         "argv",
-        ["prog", "--live", "--categories", "999", "--categories-file", str(empty)],
+        [
+            "prog",
+            "--live",
+            "--no-refresh-categories",
+            "--categories",
+            "999",
+            "--categories-file",
+            str(empty),
+        ],
     )
     assert main() == 2
 

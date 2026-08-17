@@ -80,6 +80,19 @@ def load_category_names(path: Path | None = None) -> dict[str, str]:
     return names
 
 
+def load_category_meta(path: Path | None = None) -> dict[str, object]:
+    """读取分类映射附带的 ``_meta`` 元数据；缺失或损坏返回 {}。"""
+    if path is None:
+        path = DEFAULT_CATEGORIES_PATH
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if isinstance(data, dict) and isinstance(data.get("_meta"), dict):
+        return data["_meta"]
+    return {}
+
+
 def get_category_name(category_type: str, mapping: Mapping[str, str]) -> str | None:
     """返回分类 ID 对应的显示名；未知 ID 返回 None。"""
     return mapping.get(category_type)

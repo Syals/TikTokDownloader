@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from time import time
 from typing import Any
@@ -21,9 +22,13 @@ from poc.explore._batch_config import (  # noqa: E402
 )
 from poc.explore._categories import (  # noqa: E402
     DEFAULT_CATEGORIES_PATH,
+    find_explore_categories,
     get_category_name,
     list_categories,
+    load_category_meta,
     load_category_names,
+    merge_explore_categories,
+    save_category_names,
 )
 from poc.explore._common import (  # noqa: E402
     DEFAULT_CHUNK_KB,
@@ -46,6 +51,10 @@ from poc.explore.tiktok_explore_replay import (  # noqa: E402
     load_device_id,
     load_session,
 )
+from poc.session.harvest_tiktok_session import (  # noqa: E402
+    EXPLORE_URL,
+    extract_ssr_json,
+)
 from src.explore.disk_check import check_disk_usage  # noqa: E402
 
 
@@ -55,6 +64,20 @@ DEFAULT_CATEGORY_DELAY = 5.0
 DEFAULT_MAX_PAGES = 2
 DEFAULT_COUNT = 8
 DEFAULT_DELAY = 2.0
+# 分类映射自动刷新 TTL：文档请求不带任何风控拦截（实测 HTTP/1.1 匿名可得
+# 完整 SSR），但分类表变化低频，定时任务场景无需每次运行都多一次请求。
+DEFAULT_CATEGORIES_TTL_HOURS = 168.0
+# settings 不可用时的刷新请求 UA（Linux Chromium，与 VPS 采集环境一致）。
+REFRESH_FALLBACK_USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+)
+
+
+class CategoryRefreshError(RuntimeError):
+    """分类映射联网刷新失败。"""
+
+
 # 下载前磁盘检测阈值；取值 <= 0 表示关闭对应检测。
 DEFAULT_DISK_USED_PERCENT = 70.0
 DEFAULT_MIN_FREE_GB = 10.0
@@ -103,6 +126,177 @@ def expand_categories(
     if parsed != ["all"]:
         return None
     return [category_id for category_id, _ in list_categories(names)]
+
+
+def parse_categories_from_html(html: str) -> dict[str, str]:
+    """从 explore 页 HTML 解析 SSR 分类映射（方案 A 实测路径）。
+
+    与 harvest 的 HTML 回退解析共用 ``extract_ssr_json`` / ``find_explore_categories``，
+    拿不到 ``exploreCategoryList`` 时抛 :class:`CategoryRefreshError`。
+    """
+    payload = extract_ssr_json(html)
+    if payload is None:
+        raise CategoryRefreshError(
+            "explore 页缺少 __UNIVERSAL_DATA_FOR_REHYDRATION__ SSR 数据"
+        )
+    category_list = find_explore_categories(payload)
+    if not isinstance(category_list, dict):
+        raise CategoryRefreshError("SSR 中未找到 exploreCategoryList")
+    merged = merge_explore_categories(category_list)
+    if not merged:
+        raise CategoryRefreshError("exploreCategoryList 未包含有效分类")
+    return merged
+
+
+def settings_user_agent(settings_path: Path) -> str | None:
+    """宽松读取 settings 中的 User-Agent；不可用时返回 None（不要求会话完整）。"""
+    try:
+        data = json.loads(settings_path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return None
+    info = data.get("browser_info_tiktok")
+    ua = info.get("User-Agent") if isinstance(info, dict) else None
+    return ua if isinstance(ua, str) and ua else None
+
+
+async def refresh_categories_via_http(
+    *,
+    proxy: str | None,
+    user_agent: str,
+    timeout: float = 30.0,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> dict[str, str]:
+    """匿名 httpx 请求 explore 文档并解析分类映射（不依赖登录会话）。"""
+    client_kwargs: dict[str, Any] = {
+        "headers": {
+            "User-Agent": user_agent,
+            "Accept": (
+                "text/html,application/xhtml+xml,application/xml;q=0.9,"
+                "image/avif,image/webp,image/apng,*/*;q=0.8"
+            ),
+            "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+        },
+        "follow_redirects": True,
+        "timeout": timeout,
+        "verify": False,
+    }
+    # transport 与 proxy 互斥；transport 仅供测试注入 MockTransport。
+    if transport is not None:
+        client_kwargs["transport"] = transport
+    else:
+        client_kwargs["proxy"] = proxy or None
+    async with httpx.AsyncClient(**client_kwargs) as client:
+        resp = await client.get(EXPLORE_URL)
+        if resp.status_code != 200:
+            raise CategoryRefreshError(f"explore 页返回 HTTP {resp.status_code}")
+        return parse_categories_from_html(resp.text)
+
+
+async def refresh_categories_via_browser(
+    *,
+    categories_file: Path,
+    proxy: str | None,
+) -> dict[str, str]:
+    """浏览器兜底：复用匿名脚本现有实现（含地理校验与落盘）。"""
+    from poc.explore.tiktok_explore_anonymous import harvest_anonymous_categories
+
+    return await harvest_anonymous_categories(
+        proxy=proxy,
+        headed=False,
+        skip_geo=False,
+        categories_file=categories_file,
+    )
+
+
+def categories_need_refresh(
+    path: Path,
+    *,
+    ttl_hours: float,
+    force: bool,
+    disabled: bool,
+) -> bool:
+    """判定是否需要联网刷新：禁用优先，其次强制，最后缺失/超过 TTL。
+
+    ``_meta.harvested_at`` 缺失或损坏同样视为过期，触发一次幂等刷新。
+    """
+    if disabled:
+        return False
+    if force:
+        return True
+    if not load_category_names(path):
+        return True
+    meta = load_category_meta(path)
+    try:
+        harvested_at = datetime.fromisoformat(str(meta.get("harvested_at")))
+    except (TypeError, ValueError):
+        return True
+    if harvested_at.tzinfo is None:
+        harvested_at = harvested_at.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - harvested_at > timedelta(hours=ttl_hours)
+
+
+async def maybe_refresh_categories(
+    *,
+    categories_file: Path,
+    proxy: str | None,
+    force: bool,
+    disabled: bool,
+    settings_path: Path,
+    ttl_hours: float = DEFAULT_CATEGORIES_TTL_HOURS,
+) -> str:
+    """采集前按需联网刷新分类映射：HTTP 主路径，浏览器兜底，本地降级。
+
+    返回执行状态：
+
+    - ``disabled`` / ``fresh``：未触发刷新；
+    - ``refreshed_http`` / ``refreshed_browser``：刷新成功并已落盘；
+    - ``kept_local_after_failure``：两条路径均失败但本地有映射，降级继续；
+    - ``failed_no_local``：均失败且本地无映射，调用方应退出。
+    """
+    if not categories_need_refresh(
+        categories_file, ttl_hours=ttl_hours, force=force, disabled=disabled
+    ):
+        _log(
+            "提示: --no-refresh-categories，仅使用本地分类映射。"
+            if disabled
+            else "提示: 分类映射新鲜，跳过联网刷新。"
+        )
+        return "disabled" if disabled else "fresh"
+
+    user_agent = settings_user_agent(settings_path) or REFRESH_FALLBACK_USER_AGENT
+    try:
+        categories = await refresh_categories_via_http(
+            proxy=proxy, user_agent=user_agent
+        )
+    except Exception as exc:  # noqa: BLE001
+        _log(f"警告: HTTP 刷新分类映射失败: {type(exc).__name__}: {exc}")
+        try:
+            # 兜底路径内部已完成落盘。
+            categories = await refresh_categories_via_browser(
+                categories_file=categories_file, proxy=proxy
+            )
+        except Exception as exc:  # noqa: BLE001
+            if load_category_names(categories_file):
+                _log(
+                    f"警告: 浏览器兜底亦失败，继续使用本地分类映射: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+                return "kept_local_after_failure"
+            _log(f"错误: 分类映射刷新失败且本地无映射: {type(exc).__name__}: {exc}")
+            return "failed_no_local"
+        _log(f"[完成] 已通过浏览器兜底刷新分类映射 ({len(categories)} 个分类)")
+        return "refreshed_browser"
+
+    save_category_names(categories, path=categories_file)
+    _log(f"[完成] 已通过 HTTP 刷新分类映射 ({len(categories)} 个分类)")
+    return "refreshed_http"
 
 
 def save_json(path: Path, data: object) -> None:
@@ -447,6 +641,20 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="列出已知分类 ID→名称后退出（默认读取本地映射文件）。",
     )
+    refresh_group = parser.add_mutually_exclusive_group()
+    refresh_group.add_argument(
+        "--refresh-categories",
+        action="store_true",
+        help=(
+            "采集前强制联网刷新分类映射"
+            f"（默认仅在映射缺失或超过 {DEFAULT_CATEGORIES_TTL_HOURS:.0f}h 时自动刷新）。"
+        ),
+    )
+    refresh_group.add_argument(
+        "--no-refresh-categories",
+        action="store_true",
+        help="禁用采集前的自动联网刷新，仅使用本地映射文件。",
+    )
     parser.add_argument(
         "--config",
         type=Path,
@@ -577,8 +785,15 @@ def main() -> int:
 
     if args.list_categories:
         if args.live:
-            print(
-                "[提示] --list-categories 使用本地映射文件；如需联网刷新请单独运行 harvest_tiktok_session 后重试。"
+            # --live 时先按 TTL 刷新再打印，闭环“查看即最新”。
+            asyncio.run(
+                maybe_refresh_categories(
+                    categories_file=args.categories_file,
+                    proxy=args.proxy or os.getenv("TIKTOK_POC_PROXY") or None,
+                    force=args.refresh_categories,
+                    disabled=args.no_refresh_categories,
+                    settings_path=args.settings,
+                )
             )
         return _print_categories(args.categories_file)
 
@@ -593,6 +808,18 @@ def main() -> int:
         return 2
     resolved = resolve_config(args, cfg)
     output_dir = Path(resolved["output_dir"])
+
+    refresh_state = asyncio.run(
+        maybe_refresh_categories(
+            categories_file=args.categories_file,
+            proxy=resolved["proxy"] or None,
+            force=args.refresh_categories,
+            disabled=args.no_refresh_categories,
+            settings_path=args.settings,
+        )
+    )
+    if refresh_state == "failed_no_local":
+        return 2
 
     category_names = load_category_names(args.categories_file)
     categories = parse_categories(resolved["categories"])
