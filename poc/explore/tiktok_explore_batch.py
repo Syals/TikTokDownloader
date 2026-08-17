@@ -130,6 +130,13 @@ def _collect_stop_reason(report: Sequence[Mapping[str, Any]]) -> str:
         reason = "响应缺少 itemList 字段（服务端未返回内容）"
         if probe := last.get("payload_status_probe"):
             reason += f"；状态字段: {json.dumps(probe, ensure_ascii=False)}"
+            status_code = probe.get("statusCode", probe.get("status_code", ""))
+            if status_code in ("", "0"):
+                reason += (
+                    "；statusCode=0：请求本身成功，分类内容池为空（非风控/会话问题）"
+                )
+            else:
+                reason += "；statusCode 非 0：疑似风控/限流"
         if "payload_top_keys" in last:
             top_keys = last["payload_top_keys"]
             reason += f"；响应顶层字段: {', '.join(top_keys) or '(空对象)'}"

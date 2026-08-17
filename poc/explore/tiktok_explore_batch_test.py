@@ -548,7 +548,23 @@ def test_run_batch_disk_check_failure_does_not_block_download(
                     "payload_status_probe": {"statusCode": "10205"},
                 }
             ],
-            "状态字段",
+            "疑似风控",
+        ),
+        (
+            [
+                {
+                    "json": True,
+                    "item_count": 0,
+                    "item_list_missing": True,
+                    "has_more": False,
+                    "payload_status_probe": {
+                        "statusCode": "0",
+                        "status_code": "0",
+                        "status_msg": "",
+                    },
+                }
+            ],
+            "内容池为空",
         ),
         (
             [
