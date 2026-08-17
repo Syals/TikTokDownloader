@@ -24,8 +24,10 @@ from poc.explore.tiktok_explore_batch import (  # noqa: E402
     DEFAULT_CONCURRENCY,
     DEFAULT_COUNT,
     DEFAULT_DELAY,
+    DEFAULT_DISK_USED_PERCENT,
     DEFAULT_MAX_PAGES,
     DEFAULT_MAX_RETRY,
+    DEFAULT_MIN_FREE_GB,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_CHUNK_KB,
     expand_categories,
@@ -36,6 +38,7 @@ from poc.explore.tiktok_explore_batch import (  # noqa: E402
     run_batch,
     save_json,
 )
+from src.explore.disk_check import DiskCheckResult, DiskUsageInfo  # noqa: E402
 
 
 @pytest.mark.parametrize(
@@ -90,6 +93,15 @@ def test_parse_args_boolean_optional() -> None:
     assert parse_args(["--download"]).download is True
     assert parse_args(["--db"]).no_db is False
     assert parse_args(["--no-db"]).no_db is True
+
+
+def test_parse_args_disk_thresholds() -> None:
+    args = parse_args([])
+    assert args.disk_used_percent is None
+    assert args.min_free_gb is None
+    args = parse_args(["--disk-used-percent", "85", "--min-free-gb", "20"])
+    assert args.disk_used_percent == 85.0
+    assert args.min_free_gb == 20.0
 
 
 def test_resolve_without_config_uses_builtin_defaults(
@@ -180,6 +192,19 @@ def test_resolve_explicit_empty_proxy_stays_empty(
     monkeypatch.setenv("TIKTOK_POC_PROXY", "http://env:7890")
     resolved = resolve_config(parse_args(["--proxy", ""]), {})
     assert resolved["proxy"] == ""
+
+
+def test_resolve_config_disk_thresholds_merge() -> None:
+    resolved = resolve_config(parse_args([]), {})
+    assert resolved["disk_used_percent"] == DEFAULT_DISK_USED_PERCENT
+    assert resolved["min_free_gb"] == DEFAULT_MIN_FREE_GB
+
+    resolved = resolve_config(
+        parse_args(["--disk-used-percent", "95"]),
+        {"disk_used_percent": 80.0, "min_free_gb": 12.0},
+    )
+    assert resolved["disk_used_percent"] == 95.0
+    assert resolved["min_free_gb"] == 12.0
 
 
 def test_main_list_categories_missing_file_exit_2(
@@ -283,6 +308,9 @@ def test_run_batch_aggregates_despite_persist_failure(
                 max_pages=1,
                 delay=0,
                 category_delay=0,
+                # 磁盘检测与本用例无关，显式关闭避免受宿主机磁盘水位影响。
+                disk_used_percent=0,
+                min_free_gb=0,
                 output_dir=output_dir,
                 download=True,
                 url_mode="play_url",
@@ -304,3 +332,188 @@ def test_run_batch_aggregates_despite_persist_failure(
     assert summary["119"]["category_name"] == "Singing & Dancing"
     assert "storage_warning" in summary["119"]
     assert "RuntimeError: db unavailable" in summary["119"]["storage_warning"]
+
+
+def test_run_batch_skips_download_when_disk_low(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """磁盘阈值触发时跳过该分类下载，仅保留采集与汇总。"""
+
+    async def fake_collect_explore(
+        *_: Any, **__: Any
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        return [{"id": "v1", "category_type": "119"}], [{"page": 1}]
+
+    async def unreachable_download(*_: Any, **__: Any) -> list[dict[str, Any]]:
+        raise AssertionError("磁盘不足时不应调用 download_media")
+
+    def fake_check_disk_usage(*_: Any, **__: Any) -> DiskCheckResult:
+        return DiskCheckResult(
+            need_cleanup=True,
+            usage=DiskUsageInfo(total=100, used=95, free=5),
+            used_percent=95.0,
+            free_gb=5 / 1024.0**3,
+        )
+
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.collect_explore", fake_collect_explore
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.download_media", unreachable_download
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.check_disk_usage", fake_check_disk_usage
+    )
+
+    with tempfile.TemporaryDirectory(dir=".") as tmp_dir:
+        output_dir = Path(tmp_dir)
+
+        metadata, manifest, summary = asyncio.run(
+            run_batch(
+                categories=["119"],
+                category_names={"119": "Singing & Dancing"},
+                device_id="d1",
+                browser_request_params={},
+                browser_templates=None,
+                count=8,
+                max_pages=1,
+                delay=0,
+                category_delay=0,
+                output_dir=output_dir,
+                download=True,
+                url_mode="play_url",
+                concurrency=1,
+                max_retry=1,
+                chunk_size=1024,
+                cookie={},
+                user_agent="test",
+                proxy=None,
+            )
+        )
+
+    assert len(metadata) == 1
+    assert manifest == []
+    assert summary["119"]["status"] == "ok"
+    assert summary["119"]["download_skipped"] == "disk_low"
+    assert summary["119"]["disk"]["used_percent"] == 95.0
+
+
+def test_run_batch_downloads_when_disk_sufficient(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_collect_explore(
+        *_: Any, **__: Any
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        return [{"id": "v1", "category_type": "119"}], [{"page": 1}]
+
+    async def fake_download_media(*_: Any, **__: Any) -> list[dict[str, Any]]:
+        return [{"id": "v1", "category_type": "119", "ok": True}]
+
+    def fake_check_disk_usage(*_: Any, **__: Any) -> DiskCheckResult:
+        return DiskCheckResult(
+            need_cleanup=False,
+            usage=DiskUsageInfo(total=100, used=10, free=90),
+            used_percent=10.0,
+            free_gb=90 / 1024.0**3,
+        )
+
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.collect_explore", fake_collect_explore
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.download_media", fake_download_media
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.check_disk_usage", fake_check_disk_usage
+    )
+
+    with tempfile.TemporaryDirectory(dir=".") as tmp_dir:
+        output_dir = Path(tmp_dir)
+
+        metadata, manifest, summary = asyncio.run(
+            run_batch(
+                categories=["119"],
+                category_names={"119": "Singing & Dancing"},
+                device_id="d1",
+                browser_request_params={},
+                browser_templates=None,
+                count=8,
+                max_pages=1,
+                delay=0,
+                category_delay=0,
+                output_dir=output_dir,
+                download=True,
+                url_mode="play_url",
+                concurrency=1,
+                max_retry=1,
+                chunk_size=1024,
+                cookie={},
+                user_agent="test",
+                proxy=None,
+            )
+        )
+
+    assert len(metadata) == 1
+    assert len(manifest) == 1
+    assert summary["119"]["status"] == "ok"
+    assert "download_skipped" not in summary["119"]
+    assert summary["119"]["disk"]["used_percent"] == 10.0
+
+
+def test_run_batch_disk_check_failure_does_not_block_download(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """磁盘检测本身异常时降级为警告，不阻断下载。"""
+
+    async def fake_collect_explore(
+        *_: Any, **__: Any
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        return [{"id": "v1", "category_type": "119"}], [{"page": 1}]
+
+    async def fake_download_media(*_: Any, **__: Any) -> list[dict[str, Any]]:
+        return [{"id": "v1", "category_type": "119", "ok": True}]
+
+    def broken_check_disk_usage(*_: Any, **__: Any) -> DiskCheckResult:
+        raise OSError("no disk")
+
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.collect_explore", fake_collect_explore
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.download_media", fake_download_media
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.check_disk_usage",
+        broken_check_disk_usage,
+    )
+
+    with tempfile.TemporaryDirectory(dir=".") as tmp_dir:
+        output_dir = Path(tmp_dir)
+
+        metadata, manifest, summary = asyncio.run(
+            run_batch(
+                categories=["119"],
+                category_names={"119": "Singing & Dancing"},
+                device_id="d1",
+                browser_request_params={},
+                browser_templates=None,
+                count=8,
+                max_pages=1,
+                delay=0,
+                category_delay=0,
+                output_dir=output_dir,
+                download=True,
+                url_mode="play_url",
+                concurrency=1,
+                max_retry=1,
+                chunk_size=1024,
+                cookie={},
+                user_agent="test",
+                proxy=None,
+            )
+        )
+
+    assert len(metadata) == 1
+    assert len(manifest) == 1
+    assert summary["119"]["status"] == "ok"
+    assert "OSError: no disk" in summary["119"]["disk_warning"]

@@ -35,6 +35,8 @@ class BatchProfile(BaseModel):
     max_pages: int | None = Field(default=None, ge=1)
     delay: float | None = Field(default=None, ge=0)
     category_delay: float | None = Field(default=None, ge=0)
+    disk_used_percent: float | None = Field(default=None, ge=0)
+    min_free_gb: float | None = Field(default=None, ge=0)
     concurrency: int | None = Field(default=None, ge=1)
     max_retry: int | None = Field(default=None, ge=1)
     chunk_kb: int | None = Field(default=None, ge=1)

@@ -46,6 +46,7 @@ from poc.explore.tiktok_explore_replay import (  # noqa: E402
     load_device_id,
     load_session,
 )
+from src.explore.disk_check import check_disk_usage  # noqa: E402
 
 
 DEFAULT_CATEGORIES = ""
@@ -54,6 +55,9 @@ DEFAULT_CATEGORY_DELAY = 5.0
 DEFAULT_MAX_PAGES = 2
 DEFAULT_COUNT = 8
 DEFAULT_DELAY = 2.0
+# 下载前磁盘检测阈值；取值 <= 0 表示关闭对应检测。
+DEFAULT_DISK_USED_PERCENT = 70.0
+DEFAULT_MIN_FREE_GB = 10.0
 
 # 这些字段可由配置（defaults + profile）覆盖；会话相关字段不在其中。
 CONFIGURABLE_FIELDS = (
@@ -62,6 +66,8 @@ CONFIGURABLE_FIELDS = (
     "max_pages",
     "delay",
     "category_delay",
+    "disk_used_percent",
+    "min_free_gb",
     "concurrency",
     "max_retry",
     "chunk_kb",
@@ -106,6 +112,34 @@ def save_json(path: Path, data: object) -> None:
     )
 
 
+def _disk_low_for_download(
+    category_summary: dict[str, Any],
+    path: Path,
+    *,
+    disk_used_percent: float,
+    min_free_gb: float,
+) -> bool:
+    """下载前检测磁盘空间，快照写入 category_summary。
+
+    阈值触发返回 True（调用方应跳过下载）；检测本身失败降级为
+    ``disk_warning`` 警告并返回 False，不阻断正常下载流程。
+    """
+    try:
+        disk = check_disk_usage(
+            path,
+            used_percent_threshold=disk_used_percent,
+            min_free_gb=min_free_gb,
+        )
+    except OSError as exc:
+        category_summary["disk_warning"] = f"{type(exc).__name__}: {exc}"
+        return False
+    category_summary["disk"] = {
+        "used_percent": round(disk.used_percent, 2),
+        "free_gb": round(disk.free_gb, 2),
+    }
+    return disk.need_cleanup
+
+
 def _client_kwargs(
     user_agent: str,
     cookie: dict[str, str],
@@ -134,6 +168,8 @@ async def run_batch(
     max_pages: int,
     delay: float,
     category_delay: float,
+    disk_used_percent: float = DEFAULT_DISK_USED_PERCENT,
+    min_free_gb: float = DEFAULT_MIN_FREE_GB,
     output_dir: Path,
     download: bool,
     url_mode: str,
@@ -146,7 +182,10 @@ async def run_batch(
     persist_and_upload: bool = False,
     gateway: Any = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-    """串行遍历分类，每个分类使用独立 AsyncClient；单分类失败不中断后续。"""
+    """串行遍历分类，每个分类使用独立 AsyncClient；单分类失败不中断后续。
+
+    下载前按磁盘阈值检测，空间不足时跳过该分类下载、仅保留采集。
+    """
     if browser_templates:
         initial_template: dict[str, Any] = {"params": browser_templates[0]}
         next_template: dict[str, Any] = {"params": browser_templates[1]}
@@ -196,16 +235,24 @@ async def run_batch(
 
                 manifest: list[dict[str, Any]] = []
                 if download and metadata:
-                    manifest = await download_media(
-                        client,
-                        metadata,
-                        output_dir=category_dir,
-                        mode=url_mode,
-                        concurrency=concurrency,
-                        max_retry=max_retry,
-                        chunk_size=chunk_size,
-                        user_agent=user_agent,
-                    )
+                    if _disk_low_for_download(
+                        category_summary,
+                        category_dir,
+                        disk_used_percent=disk_used_percent,
+                        min_free_gb=min_free_gb,
+                    ):
+                        category_summary["download_skipped"] = "disk_low"
+                    else:
+                        manifest = await download_media(
+                            client,
+                            metadata,
+                            output_dir=category_dir,
+                            mode=url_mode,
+                            concurrency=concurrency,
+                            max_retry=max_retry,
+                            chunk_size=chunk_size,
+                            user_agent=user_agent,
+                        )
 
             save_json(category_dir / "metadata.json", metadata)
             save_json(category_dir / "report.json", report)
@@ -291,6 +338,18 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-pages", type=positive_int, default=None)
     parser.add_argument("--delay", type=nonnegative_float, default=None)
     parser.add_argument("--category-delay", type=nonnegative_float, default=None)
+    parser.add_argument(
+        "--disk-used-percent",
+        type=nonnegative_float,
+        default=None,
+        help="下载前检测：使用率 >= 该值时跳过该分类下载（0 关闭，默认 90）。",
+    )
+    parser.add_argument(
+        "--min-free-gb",
+        type=nonnegative_float,
+        default=None,
+        help="下载前检测：剩余空间 <= 该值(GB)时跳过下载（0 关闭，默认 5）。",
+    )
     parser.add_argument("--settings", type=Path, default=DEFAULT_SETTINGS_PATH)
     parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument(
@@ -331,6 +390,8 @@ def resolve_config(
         "max_pages": DEFAULT_MAX_PAGES,
         "delay": DEFAULT_DELAY,
         "category_delay": DEFAULT_CATEGORY_DELAY,
+        "disk_used_percent": DEFAULT_DISK_USED_PERCENT,
+        "min_free_gb": DEFAULT_MIN_FREE_GB,
         "concurrency": DEFAULT_CONCURRENCY,
         "max_retry": DEFAULT_MAX_RETRY,
         "chunk_kb": DEFAULT_CHUNK_KB,
@@ -467,6 +528,8 @@ def main() -> int:
                 max_pages=resolved["max_pages"],
                 delay=resolved["delay"],
                 category_delay=resolved["category_delay"],
+                disk_used_percent=resolved["disk_used_percent"],
+                min_free_gb=resolved["min_free_gb"],
                 output_dir=output_dir,
                 download=resolved["download"],
                 url_mode=resolved["url_mode"],
@@ -516,6 +579,13 @@ def main() -> int:
                 f"已下载 {cat_summary['downloaded']} / "
                 f"{cat_summary['duration_seconds']} 秒"
             )
+            if cat_summary.get("download_skipped"):
+                disk = cat_summary.get("disk") or {}
+                print(
+                    f"    磁盘空间不足，已跳过下载: "
+                    f"used={disk.get('used_percent')}%, "
+                    f"free={disk.get('free_gb')} GB"
+                )
         else:
             print(
                 f"  [{category_type}] {category_name}: "

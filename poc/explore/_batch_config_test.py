@@ -97,3 +97,23 @@ def test_load_no_profile_uses_defaults_only(project_tmp: Path) -> None:
 def test_load_empty_config_ok(project_tmp: Path) -> None:
     path = write_config(project_tmp, {})
     assert load_batch_config(path, None) == {}
+
+
+def test_load_disk_threshold_fields(project_tmp: Path) -> None:
+    path = write_config(
+        project_tmp,
+        {
+            "defaults": {"disk_used_percent": 85.0},
+            "profiles": {"night": {"min_free_gb": 20.0}},
+        },
+    )
+    assert load_batch_config(path, "night") == {
+        "disk_used_percent": 85.0,
+        "min_free_gb": 20.0,
+    }
+
+
+def test_load_negative_disk_threshold_rejects(project_tmp: Path) -> None:
+    path = write_config(project_tmp, {"defaults": {"min_free_gb": -1.0}})
+    with pytest.raises(BatchConfigError, match="校验失败"):
+        load_batch_config(path, None)
