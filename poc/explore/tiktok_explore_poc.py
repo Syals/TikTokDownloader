@@ -232,6 +232,38 @@ def refresh_session(cookie: dict[str, str], response: httpx.Response) -> str:
     return response_cookies.get("msToken", "")
 
 
+# TikTok 错误/风控响应里常见的状态字段；缺 itemList 时提取它们辅助定位。
+_STATUS_PROBE_FIELDS = (
+    "statusCode",
+    "statusMsg",
+    "status_code",
+    "status_msg",
+    "code",
+    "message",
+    "type",
+    "status",
+    "region",
+)
+
+
+def _missing_item_list_diagnostics(
+    payload: Mapping[str, Any], response: httpx.Response
+) -> dict[str, Any]:
+    """缺 itemList 时记录响应快照，供事后区分风控/签名失败/空内容。"""
+    diagnostics: dict[str, Any] = {
+        "payload_top_keys": sorted(payload.keys())[:20],
+        "body_preview": response.text[:800],
+    }
+    probe = {
+        field: str(payload[field])[:200]
+        for field in _STATUS_PROBE_FIELDS
+        if field in payload
+    }
+    if probe:
+        diagnostics["payload_status_probe"] = probe
+    return diagnostics
+
+
 async def fetch_explore_page(
     client: httpx.AsyncClient,
     *,
@@ -290,6 +322,8 @@ async def fetch_explore_page(
                 if isinstance(item_list, list)
                 else []
             )
+            if not isinstance(item_list, list):
+                summary |= _missing_item_list_diagnostics(payload, response)
             next_cursor, has_more = extract_explore_pagination(payload, cursor)
             summary |= {
                 "item_count": len(items),

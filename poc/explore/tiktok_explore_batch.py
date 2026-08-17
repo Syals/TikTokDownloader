@@ -127,7 +127,13 @@ def _collect_stop_reason(report: Sequence[Mapping[str, Any]]) -> str:
     if "item_count" not in last:
         return "响应体不是有效 JSON 对象（疑似被拦截）"
     if last.get("item_list_missing"):
-        return "响应缺少 itemList 字段（服务端未返回内容）"
+        reason = "响应缺少 itemList 字段（服务端未返回内容）"
+        if probe := last.get("payload_status_probe"):
+            reason += f"；状态字段: {json.dumps(probe, ensure_ascii=False)}"
+        if "payload_top_keys" in last:
+            top_keys = last["payload_top_keys"]
+            reason += f"；响应顶层字段: {', '.join(top_keys) or '(空对象)'}"
+        return reason
     if not last.get("has_more"):
         return (
             "hasMore=false：服务端判定无更多内容，多见于该分类不向当前地区/账号会话投放"

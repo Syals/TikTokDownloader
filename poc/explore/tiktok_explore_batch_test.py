@@ -542,6 +542,31 @@ def test_run_batch_disk_check_failure_does_not_block_download(
                 {
                     "json": True,
                     "item_count": 0,
+                    "item_list_missing": True,
+                    "has_more": False,
+                    "payload_top_keys": ["statusCode", "statusMsg"],
+                    "payload_status_probe": {"statusCode": "10205"},
+                }
+            ],
+            "状态字段",
+        ),
+        (
+            [
+                {
+                    "json": True,
+                    "item_count": 0,
+                    "item_list_missing": True,
+                    "has_more": False,
+                    "payload_top_keys": [],
+                }
+            ],
+            "响应顶层字段",
+        ),
+        (
+            [
+                {
+                    "json": True,
+                    "item_count": 0,
                     "item_list_missing": False,
                     "has_more": False,
                 }

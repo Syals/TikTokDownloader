@@ -11,6 +11,7 @@ from poc.explore.tiktok_explore_poc import (
     build_base_params,
     build_explore_params,
     collect_explore,
+    fetch_explore_page,
     initial_cursor,
     load_browser_request_params,
     load_explore_templates,
@@ -104,6 +105,59 @@ def test_refresh_session_returns_only_a_new_response_ms_token() -> None:
 
     assert refresh_session(cookie, response) == "fresh"
     assert cookie["msToken"] == "fresh"
+
+
+async def _fetch_with_payload(payload: object) -> tuple[Any, dict[str, Any]]:
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        result, summary, _ = await fetch_explore_page(
+            client,
+            template={"params": [("cursor", "0")]},
+            category_type="105",
+            pull_type="1",
+            cursor="0",
+            count=8,
+            cookie={},
+            ms_token="",
+            user_agent="test",
+        )
+    return result, summary
+
+
+def test_fetch_explore_page_records_diagnostics_when_item_list_missing() -> None:
+    """缺 itemList 时应把响应顶层字段/状态字段/响应体快照写入 report。"""
+
+    async def run() -> tuple[Any, dict[str, Any]]:
+        return await _fetch_with_payload(
+            {"statusCode": 10205, "statusMsg": "Your IP address is restricted"}
+        )
+
+    payload, summary = asyncio.run(run())
+
+    assert isinstance(payload, dict)
+    assert summary["json"] is True
+    assert summary["payload_top_keys"] == ["statusCode", "statusMsg"]
+    assert summary["payload_status_probe"] == {
+        "statusCode": "10205",
+        "statusMsg": "Your IP address is restricted",
+    }
+    assert "10205" in summary["body_preview"]
+
+
+def test_fetch_explore_page_no_probe_fields_still_dumps_body() -> None:
+    """空对象响应（签名/msToken 类问题）无状态字段，但仍记录响应体。"""
+
+    async def run() -> tuple[Any, dict[str, Any]]:
+        return await _fetch_with_payload({})
+
+    payload, summary = asyncio.run(run())
+
+    assert payload == {}
+    assert summary["payload_top_keys"] == []
+    assert "payload_status_probe" not in summary
+    assert "body_preview" in summary
 
 
 def test_collect_explore_continues_after_missing_initial_item_list(
