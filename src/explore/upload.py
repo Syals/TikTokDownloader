@@ -163,10 +163,14 @@ async def upload_pending_explore(
                     layout,
                 )
                 if local is None:
-                    logger.warning(f"跳过 {video_id}: media_path 为空")
+                    logger.warning(
+                        f"跳过 {video_id}: media_path 为空，将重置为待重新下载"
+                    )
                     return video_id, "skipped", None
                 if not local.is_file():
-                    logger.warning(f"跳过 {video_id}: 本地文件不存在 {local}")
+                    logger.warning(
+                        f"跳过 {video_id}: 本地文件不存在 {local}，将重置为待重新下载"
+                    )
                     return video_id, "skipped", None
 
                 key = build_object_key(record, local.name, key_prefix, category_slugs)
@@ -192,6 +196,14 @@ async def upload_pending_explore(
         skipped = 0
         for video_id, status, key in upload_results:
             if status == "skipped":
+                try:
+                    async with get_tiktok_db_session() as session:
+                        repo = TiktokExploreItemRepository(session)
+                        persisted = await repo.mark_media_missing(video_id)
+                    if not persisted:
+                        raise RuntimeError("数据库记录不存在或未更新")
+                except Exception as exc:  # noqa: BLE001
+                    logger.error(f"缺失文件状态回写失败 {video_id}: {exc}")
                 skipped += 1
                 continue
 

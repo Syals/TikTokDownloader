@@ -176,6 +176,19 @@ class TiktokExploreItemRepository:
         result = await self.session.execute(stmt)
         return (getattr(result, "rowcount", None) or 0) > 0
 
+    async def mark_media_missing(self, video_id: str) -> bool:
+        """重置本地媒体缺失条目，等待重新下载后再次上传。"""
+        stmt = (
+            update(TiktokExploreItemModel)
+            .where(
+                TiktokExploreItemModel.video_id == video_id,
+                TiktokExploreItemModel.is_uploaded == 2,
+            )
+            .values(is_downloaded=0, is_uploaded=0, uploaded_at=None)
+        )
+        result = await self.session.execute(stmt)
+        return (getattr(result, "rowcount", None) or 0) > 0
+
     async def mark_uploaded(self, video_id: str, object_key: str) -> bool:
         """标记上传成功并回填完整对象 key。"""
         stmt = (
