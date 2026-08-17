@@ -4,7 +4,7 @@ import hashlib
 import json
 import os
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from random import uniform
 from time import time
@@ -330,7 +330,14 @@ async def collect_explore(
     cookie: dict[str, str],
     user_agent: str,
     initial_pull_type: str = "1",
+    progress: Callable[[int, int, int], None] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """逐页采集 Explore 内容并按 id 去重。
+
+    Args:
+        progress: 可选进度回调 ``(page, new_item_count, total_items)``，
+            每页解析完成后同步调用，供批量脚本打印实时进度。
+    """
     cursor = initial_cursor(initial_template)
     next_template_has_cursor = any(
         name.lower() == "cursor"
@@ -377,6 +384,10 @@ async def collect_explore(
             seen_ids.add(item["id"])
             metadata.append(flatten_explore_item(item, category_type))
             new_item_count += 1
+
+        summary["new_item_count"] = new_item_count
+        if progress is not None:
+            progress(page, new_item_count, len(metadata))
 
         next_cursor, has_more = extract_explore_pagination(payload, cursor)
         if not has_more:

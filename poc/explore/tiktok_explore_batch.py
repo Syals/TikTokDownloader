@@ -5,7 +5,7 @@ import asyncio
 import json
 import os
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from time import time
 from typing import Any
@@ -112,6 +112,43 @@ def save_json(path: Path, data: object) -> None:
     )
 
 
+def _log(message: str) -> None:
+    """进度统一走 stdout 并立即 flush，保证重定向到文件时实时可见。"""
+    print(message, flush=True)
+
+
+def _collect_stop_reason(report: Sequence[Mapping[str, Any]]) -> str:
+    """从分页报告推导采集停止原因，用于 0 条目分类的日志提示。"""
+    if not report:
+        return "无分页响应（未收到任何页面报告）"
+    last = report[-1]
+    if last.get("json") is False:
+        return "响应非 JSON（疑似风控/验证页，需检查 cookie 或代理）"
+    if "item_count" not in last:
+        return "响应体不是有效 JSON 对象（疑似被拦截）"
+    if last.get("item_list_missing"):
+        return "响应缺少 itemList 字段（服务端未返回内容）"
+    if not last.get("has_more"):
+        return (
+            "hasMore=false：服务端判定无更多内容，多见于该分类不向当前地区/账号会话投放"
+        )
+    if last.get("new_item_count", 1) == 0:
+        return "翻页无新增条目（全部重复），提前停止"
+    return "达到 max_pages 上限"
+
+
+def _page_progress(
+    category_type: str, category_name: str
+) -> Callable[[int, int, int], None]:
+    def progress(page: int, new_items: int, total_items: int) -> None:
+        _log(
+            f"    [{category_type}] {category_name} 第 {page} 页: "
+            f"新增 {new_items} 条，累计 {total_items} 条"
+        )
+
+    return progress
+
+
 def _disk_low_for_download(
     category_summary: dict[str, Any],
     path: Path,
@@ -204,6 +241,12 @@ async def run_batch(
     all_manifest: list[dict[str, Any]] = []
     summary: dict[str, Any] = {}
 
+    if not persist_and_upload:
+        _log(
+            "提示: 未启用数据库持久化与 S3 上传（--no-db 或 S3 初始化失败），"
+            "本次仅采集 + 下载。"
+        )
+
     for index, category_type in enumerate(categories):
         started_at = time()
         category_dir = output_dir / category_type
@@ -215,6 +258,10 @@ async def run_batch(
         }
 
         try:
+            _log(
+                f"[{category_type}] {category_name}: 开始采集 "
+                f"(count={count}, max_pages={max_pages})"
+            )
             async with httpx.AsyncClient(
                 **_client_kwargs(user_agent, cookie, proxy)
             ) as client:
@@ -229,9 +276,22 @@ async def run_batch(
                     cookie=cookie,
                     user_agent=user_agent,
                     initial_pull_type="1",
+                    progress=_page_progress(category_type, category_name),
                 )
                 for item in metadata:
                     item["category_name"] = category_name
+
+                stop_reason = _collect_stop_reason(report)
+                if metadata:
+                    _log(
+                        f"[{category_type}] {category_name}: 采集完成 "
+                        f"{len(report)} 页 / {len(metadata)} 条目 ({stop_reason})"
+                    )
+                else:
+                    _log(
+                        f"[{category_type}] {category_name}: 采集完成 0 条目 / "
+                        f"{len(report)} 页 — {stop_reason}"
+                    )
 
                 manifest: list[dict[str, Any]] = []
                 if download and metadata:
@@ -242,6 +302,9 @@ async def run_batch(
                         min_free_gb=min_free_gb,
                     ):
                         category_summary["download_skipped"] = "disk_low"
+                        _log(
+                            f"[{category_type}] {category_name}: 磁盘空间不足，跳过下载"
+                        )
                     else:
                         manifest = await download_media(
                             client,
@@ -253,6 +316,19 @@ async def run_batch(
                             chunk_size=chunk_size,
                             user_agent=user_agent,
                         )
+                        downloaded_ok = sum(record["ok"] for record in manifest)
+                        _log(
+                            f"[{category_type}] {category_name}: 下载完成 "
+                            f"{downloaded_ok}/{len(manifest)} 个媒体文件"
+                        )
+                        if downloaded_ok < len(manifest):
+                            _log(
+                                f"[{category_type}] {category_name}: "
+                                f"{len(manifest) - downloaded_ok} 个下载失败，详见 "
+                                f"{category_dir / 'download_manifest.json'}"
+                            )
+                elif download:
+                    _log(f"[{category_type}] {category_name}: 采集 0 条目，跳过下载")
 
             save_json(category_dir / "metadata.json", metadata)
             save_json(category_dir / "report.json", report)
@@ -262,17 +338,49 @@ async def run_batch(
             if persist_and_upload and metadata:
                 try:
                     await persist_to_db(metadata, manifest)
-                    if download and manifest:
-                        from src.explore.upload import upload_pending_explore
-
-                        await upload_pending_explore(
-                            media_root=output_dir,
-                            layout="batch",
-                            category_type=category_type,
-                            gateway=gateway,
-                        )
                 except Exception as exc:  # noqa: BLE001
-                    category_summary["storage_warning"] = f"{type(exc).__name__}: {exc}"
+                    reason = f"{type(exc).__name__}: {exc}"
+                    category_summary["storage_warning"] = reason
+                    _log(
+                        f"[{category_type}] {category_name}: 持久化数据库失败，"
+                        f"跳过上传: {reason}"
+                    )
+                else:
+                    _log(
+                        f"[{category_type}] {category_name}: "
+                        f"已持久化 {len(metadata)} 条到数据库"
+                    )
+                    if not (download and manifest):
+                        category_summary["upload_skipped"] = True
+                        _log(
+                            f"[{category_type}] {category_name}: "
+                            "无已下载清单（未开启下载或无媒体 URL），跳过上传"
+                        )
+                    else:
+                        try:
+                            from src.explore.upload import upload_pending_explore
+
+                            upload_result = await upload_pending_explore(
+                                media_root=output_dir,
+                                layout="batch",
+                                category_type=category_type,
+                                gateway=gateway,
+                                limit=max(len(manifest), 100),
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            reason = f"{type(exc).__name__}: {exc}"
+                            category_summary["storage_warning"] = reason
+                            _log(
+                                f"[{category_type}] {category_name}: 上传异常: {reason}"
+                            )
+                        else:
+                            category_summary["upload"] = upload_result
+                            _log(
+                                f"[{category_type}] {category_name}: 上传完成 "
+                                f"成功 {upload_result.get('success', 0)} / "
+                                f"失败 {upload_result.get('failed', 0)} / "
+                                f"跳过 {upload_result.get('skipped', 0)}"
+                            )
 
             all_metadata.extend(metadata)
             all_manifest.extend(manifest)
@@ -281,6 +389,7 @@ async def run_batch(
                 "status": "ok",
                 "items": len(metadata),
                 "pages": len(report),
+                "collect_stop_reason": stop_reason,
                 "downloaded": sum(record["ok"] for record in manifest),
                 "manifest_total": len(manifest),
                 "duration_seconds": round(time() - started_at, 2),
@@ -564,30 +673,56 @@ def main() -> int:
     total_items = len(metadata)
     total_manifest = len(manifest)
     downloaded = sum(record["ok"] for record in manifest)
-    print(
+    upload_totals = {
+        field: sum(
+            (cat_summary.get("upload") or {}).get(field, 0)
+            for cat_summary in summary.values()
+        )
+        for field in ("success", "failed", "skipped")
+    }
+    _log(
         f"批量 Explore 完成: {len(categories)} 个分类, {total_items} 个条目, "
-        f"已下载 {downloaded}/{total_manifest} 个媒体文件。"
+        f"已下载 {downloaded}/{total_manifest} 个媒体文件, "
+        f"已上传 {upload_totals['success']} 个"
+        f"（失败 {upload_totals['failed']}, 跳过 {upload_totals['skipped']}）。"
     )
     for category_type, cat_summary in summary.items():
         status = cat_summary.get("status")
         category_name = cat_summary.get("category_name") or "-"
         if status == "ok":
-            print(
+            _log(
                 f"  [{category_type}] {category_name}: "
                 f"{cat_summary['items']} 条目 / "
                 f"{cat_summary['pages']} 页 / "
                 f"已下载 {cat_summary['downloaded']} / "
                 f"{cat_summary['duration_seconds']} 秒"
             )
+            upload = cat_summary.get("upload")
+            if upload is not None:
+                _log(
+                    f"    上传: 成功 {upload.get('success', 0)} / "
+                    f"失败 {upload.get('failed', 0)} / "
+                    f"跳过 {upload.get('skipped', 0)}"
+                )
+            elif cat_summary.get("upload_skipped"):
+                _log("    跳过上传: 无已下载清单（未开启下载或无媒体 URL）")
+            if not cat_summary.get("items"):
+                reason = cat_summary.get("collect_stop_reason", "未知原因")
+                _log(
+                    f"    0 条目提示: {reason}；逐页明细见 "
+                    f"{(output_dir / category_type / 'report.json').as_posix()}"
+                )
+            if warning := cat_summary.get("storage_warning"):
+                _log(f"    存储/上传警告: {warning}")
             if cat_summary.get("download_skipped"):
                 disk = cat_summary.get("disk") or {}
-                print(
+                _log(
                     f"    磁盘空间不足，已跳过下载: "
                     f"used={disk.get('used_percent')}%, "
                     f"free={disk.get('free_gb')} GB"
                 )
         else:
-            print(
+            _log(
                 f"  [{category_type}] {category_name}: "
                 f"{status}: {cat_summary.get('error', '')}"
             )

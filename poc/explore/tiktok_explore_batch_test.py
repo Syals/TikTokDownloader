@@ -30,6 +30,7 @@ from poc.explore.tiktok_explore_batch import (  # noqa: E402
     DEFAULT_MIN_FREE_GB,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_CHUNK_KB,
+    _collect_stop_reason,
     expand_categories,
     main,
     parse_args,
@@ -517,3 +518,253 @@ def test_run_batch_disk_check_failure_does_not_block_download(
     assert len(manifest) == 1
     assert summary["119"]["status"] == "ok"
     assert "OSError: no disk" in summary["119"]["disk_warning"]
+
+
+@pytest.mark.parametrize(
+    ("report", "expected_fragment"),
+    [
+        ([], "无分页响应"),
+        ([{"json": False}], "响应非 JSON"),
+        ([{"json": True, "http_status": 200}], "不是有效 JSON 对象"),
+        (
+            [
+                {
+                    "json": True,
+                    "item_count": 0,
+                    "item_list_missing": True,
+                    "has_more": False,
+                }
+            ],
+            "缺少 itemList",
+        ),
+        (
+            [
+                {
+                    "json": True,
+                    "item_count": 0,
+                    "item_list_missing": False,
+                    "has_more": False,
+                }
+            ],
+            "hasMore=false",
+        ),
+        (
+            [{"json": True, "item_count": 8, "has_more": True, "new_item_count": 0}],
+            "全部重复",
+        ),
+        (
+            [{"json": True, "item_count": 8, "has_more": True, "new_item_count": 8}],
+            "max_pages 上限",
+        ),
+    ],
+)
+def test_collect_stop_reason_derives_last_page_cause(
+    report: list[dict[str, Any]], expected_fragment: str
+) -> None:
+    assert expected_fragment in _collect_stop_reason(report)
+
+
+def test_run_batch_records_upload_result_and_logs(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """上传结果应写入 summary 并在控制台打印成功/失败/跳过计数。"""
+
+    async def fake_collect_explore(
+        *_: Any, **__: Any
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        return [
+            {"id": "v1", "category_type": "119"},
+            {"id": "v2", "category_type": "119"},
+        ], [{"page": 1}]
+
+    async def fake_download_media(*_: Any, **__: Any) -> list[dict[str, Any]]:
+        return [
+            {"id": "v1", "category_type": "119", "ok": True},
+            {"id": "v2", "category_type": "119", "ok": True},
+        ]
+
+    async def fake_persist_to_db(*_: Any, **__: Any) -> None:
+        return None
+
+    async def fake_upload_pending_explore(**_: Any) -> dict[str, int]:
+        return {"success": 2, "failed": 1, "skipped": 0}
+
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.collect_explore", fake_collect_explore
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.download_media", fake_download_media
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.persist_to_db", fake_persist_to_db
+    )
+    monkeypatch.setattr(
+        "src.explore.upload.upload_pending_explore", fake_upload_pending_explore
+    )
+
+    with tempfile.TemporaryDirectory(dir=".") as tmp_dir:
+        output_dir = Path(tmp_dir)
+
+        metadata, manifest, summary = asyncio.run(
+            run_batch(
+                categories=["119"],
+                category_names={"119": "Singing & Dancing"},
+                device_id="d1",
+                browser_request_params={},
+                browser_templates=None,
+                count=8,
+                max_pages=1,
+                delay=0,
+                category_delay=0,
+                disk_used_percent=0,
+                min_free_gb=0,
+                output_dir=output_dir,
+                download=True,
+                url_mode="play_url",
+                concurrency=1,
+                max_retry=1,
+                chunk_size=1024,
+                cookie={},
+                user_agent="test",
+                proxy=None,
+                persist_and_upload=True,
+                gateway="fake-gateway",
+            )
+        )
+
+    assert len(metadata) == 2
+    assert summary["119"]["status"] == "ok"
+    assert summary["119"]["upload"] == {"success": 2, "failed": 1, "skipped": 0}
+    out = capsys.readouterr().out
+    assert "已持久化 2 条到数据库" in out
+    assert "上传完成 成功 2 / 失败 1 / 跳过 0" in out
+
+
+def test_run_batch_logs_reason_for_empty_category(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """分类返回 0 条目时应打印停止原因并写入 summary，方便定位服务端行为。"""
+
+    async def fake_collect_explore(
+        *_: Any, **__: Any
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        return [], [
+            {
+                "page": 1,
+                "json": True,
+                "item_count": 0,
+                "item_list_missing": False,
+                "has_more": False,
+            }
+        ]
+
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.collect_explore", fake_collect_explore
+    )
+
+    with tempfile.TemporaryDirectory(dir=".") as tmp_dir:
+        output_dir = Path(tmp_dir)
+
+        metadata, manifest, summary = asyncio.run(
+            run_batch(
+                categories=["119"],
+                category_names={"119": "Singing & Dancing"},
+                device_id="d1",
+                browser_request_params={},
+                browser_templates=None,
+                count=8,
+                max_pages=1,
+                delay=0,
+                category_delay=0,
+                output_dir=output_dir,
+                download=True,
+                url_mode="play_url",
+                concurrency=1,
+                max_retry=1,
+                chunk_size=1024,
+                cookie={},
+                user_agent="test",
+                proxy=None,
+            )
+        )
+
+    assert metadata == []
+    assert manifest == []
+    assert summary["119"]["status"] == "ok"
+    assert "hasMore=false" in summary["119"]["collect_stop_reason"]
+    out = capsys.readouterr().out
+    assert "采集完成 0 条目" in out
+    assert "hasMore=false" in out
+
+
+def test_main_prints_empty_category_hint_and_upload_totals(
+    monkeypatch: pytest.MonkeyPatch,
+    project_tmp: Path,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """main 汇总输出应包含 0 条目原因、上传总数与未启用上传提示。"""
+
+    async def fake_collect_explore(
+        *_: Any, **__: Any
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        return [], [
+            {
+                "page": 1,
+                "json": True,
+                "item_count": 0,
+                "item_list_missing": False,
+                "has_more": False,
+            }
+        ]
+
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.collect_explore", fake_collect_explore
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.load_session",
+        lambda _: ({}, "ua"),
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.load_device_id",
+        lambda _: "123",
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.load_browser_request_params",
+        lambda _: {},
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.load_explore_templates",
+        lambda _: None,
+    )
+
+    settings_path = project_tmp / "settings.json"
+    settings_path.write_text("{}", encoding="utf-8")
+    categories_path = project_tmp / "categories.json"
+    save_category_names({"119": "Singing & Dancing"}, path=categories_path)
+    output_dir = project_tmp / "out"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "prog",
+            "--live",
+            "--no-db",
+            "--download",
+            "--categories",
+            "119",
+            "--settings",
+            str(settings_path),
+            "--categories-file",
+            str(categories_path),
+            "--output-dir",
+            str(output_dir),
+        ],
+    )
+
+    assert main() == 0
+    out = capsys.readouterr().out
+    assert "提示: 未启用数据库持久化与 S3 上传" in out
+    assert "采集完成 0 条目" in out
+    assert "0 条目提示: hasMore=false" in out
+    assert "已上传 0 个（失败 0, 跳过 0）" in out
+    assert (output_dir / "summary.json").is_file()

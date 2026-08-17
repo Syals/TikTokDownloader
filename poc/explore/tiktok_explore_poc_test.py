@@ -149,6 +149,55 @@ def test_collect_explore_continues_after_missing_initial_item_list(
     assert report[0]["item_list_missing"] is True
 
 
+def test_collect_explore_reports_progress_and_new_item_count(
+    monkeypatch,
+) -> None:
+    pages = [
+        ({"hasMore": True, "cursor": "next", "itemList": [{"id": "v1"}]}, {}, ""),
+        (
+            {
+                "hasMore": False,
+                "cursor": "end",
+                "itemList": [{"id": "v1"}, {"id": "v2"}],
+            },
+            {},
+            "",
+        ),
+    ]
+    remaining = iter(pages)
+
+    async def fake_fetch_explore_page(*_: Any, **__: Any):
+        return next(remaining)
+
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_poc.fetch_explore_page",
+        fake_fetch_explore_page,
+    )
+
+    progress_events: list[tuple[int, int, int]] = []
+
+    metadata, report = asyncio.run(
+        collect_explore(
+            client=httpx.AsyncClient(),
+            initial_template={"params": [("cursor", "0")]},
+            next_template={"params": [("cursor", "next")]},
+            category_type="100",
+            count=8,
+            max_pages=2,
+            delay=0,
+            cookie={},
+            user_agent="test",
+            progress=lambda page, new, total: progress_events.append(
+                (page, new, total)
+            ),
+        )
+    )
+
+    assert [item["id"] for item in metadata] == ["v1", "v2"]
+    assert progress_events == [(1, 1, 1), (2, 1, 2)]
+    assert [page["new_item_count"] for page in report] == [1, 1]
+
+
 def test_load_browser_fields_and_device_id_from_settings() -> None:
     with tempfile.TemporaryDirectory(dir=".") as temp_dir:
         settings_path = Path(temp_dir) / "settings.json"

@@ -17,3 +17,4 @@ test*.py
 *.mp4
 test*.py
 .env
+.output/
