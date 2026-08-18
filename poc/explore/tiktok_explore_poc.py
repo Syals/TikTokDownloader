@@ -513,11 +513,14 @@ async def persist_to_db(
         repo = TiktokExploreItemRepository(session)
         await repo.upsert_batch(metadata, default_s3_provider="s3")
         for record in manifest:
+            # 下载失败时不回填规划中的路径/字节数，避免留下 stale 的
+            # media_path 误导后续上传消费器。
+            ok = bool(record["ok"])
             await repo.update_media(
                 record["id"],
-                record["media_path"],
-                record["bytes"],
-                int(record["ok"]),
+                record["media_path"] if ok else None,
+                record["bytes"] if ok else None,
+                int(ok),
             )
 
 

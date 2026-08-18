@@ -170,7 +170,7 @@ class TiktokExploreItemModel(TiktokBase):
         SmallInteger,
         nullable=False,
         default=0,
-        comment="是否已下载:0否1是",
+        comment="是否已下载:-1已放弃(本地文件缺失,CDN链接过期不可重下)0否1是",
     )
 
     # 上传状态

@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import select, text, update
+from sqlalchemy import case, select, text, update
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -144,15 +144,25 @@ class TiktokExploreItemRepository:
         media_bytes: int | None,
         is_downloaded: int,
     ) -> bool:
-        """下载完成后回填本地媒体路径与字节数。"""
+        """下载完成后回填本地媒体路径与字节数。
+
+        下载成功时把非终态的 ``is_uploaded``（处理中/失败即 2）复位为 0，
+        使条目重新进入上传队列；已上传成功（1）保持不变，避免重复上传。
+        """
+        values: dict[str, Any] = {
+            "media_path": media_path,
+            "media_bytes": media_bytes,
+            "is_downloaded": is_downloaded,
+        }
+        if is_downloaded == 1:
+            values["is_uploaded"] = case(
+                (TiktokExploreItemModel.is_uploaded != 1, 0),
+                else_=TiktokExploreItemModel.is_uploaded,
+            )
         stmt = (
             update(TiktokExploreItemModel)
             .where(TiktokExploreItemModel.video_id == video_id)
-            .values(
-                media_path=media_path,
-                media_bytes=media_bytes,
-                is_downloaded=is_downloaded,
-            )
+            .values(**values)
         )
         result = await self.session.execute(stmt)
         return (getattr(result, "rowcount", None) or 0) > 0
@@ -176,15 +186,27 @@ class TiktokExploreItemRepository:
         result = await self.session.execute(stmt)
         return (getattr(result, "rowcount", None) or 0) > 0
 
-    async def mark_media_missing(self, video_id: str) -> bool:
-        """重置本地媒体缺失条目，等待重新下载后再次上传。"""
+    async def mark_media_abandoned(self, video_id: str) -> bool:
+        """把本地媒体缺失的条目标记为已放弃终态（``is_downloaded=-1``）。
+
+        TikTok CDN 下载链接为小时级时效，跨轮重下必然 403，因此缺失即
+        放弃：条目立即退出上传队列，不再重置回待下载死循环。若未来
+        重采到同一视频并下载成功，``update_media`` 会写回 1 自然复活。
+        同时清空 stale 的本地路径与字节数。
+        """
         stmt = (
             update(TiktokExploreItemModel)
             .where(
                 TiktokExploreItemModel.video_id == video_id,
                 TiktokExploreItemModel.is_uploaded == 2,
             )
-            .values(is_downloaded=0, is_uploaded=0, uploaded_at=None)
+            .values(
+                is_downloaded=-1,
+                is_uploaded=0,
+                media_path=None,
+                media_bytes=None,
+                uploaded_at=None,
+            )
         )
         result = await self.session.execute(stmt)
         return (getattr(result, "rowcount", None) or 0) > 0
