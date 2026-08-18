@@ -113,21 +113,23 @@ def save_category_names(
     categories: Mapping[str, str],
     path: Path | None = None,
 ) -> Path:
-    """将分类映射合并写入 ``path``，附带 ``_meta`` 元数据。
+    """将分类映射整体覆写入 ``path``，附带 ``_meta`` 元数据。
 
-    先读取已有映射再合并，避免单次 SSR 缺分类导致已知 ID 收缩。
+    每次覆写而非合并：文件始终等于最近一次成功采集的结果，服务端
+    下线/改版的废弃 ID 不会残留。空映射视为异常拒绝写入，防止
+    单次解析失败清空真相源；调用方均已在非空时才落盘。
     """
     if path is None:
         path = DEFAULT_CATEGORIES_PATH
-    merged = load_category_names(path)
-    merged.update(categories)
+    if not categories:
+        raise ValueError("分类映射为空，拒绝覆写分类文件")
     payload: dict[str, object] = {
         "_meta": {
             "source": "explore_ssr",
             "harvested_at": datetime.now(timezone.utc).isoformat(),
         }
     }
-    payload.update(merged)
+    payload.update(dict(categories))
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=4), encoding="utf-8")
     return path

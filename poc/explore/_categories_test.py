@@ -125,9 +125,23 @@ def test_save_and_reload_roundtrip() -> None:
         assert "harvested_at" in raw["_meta"]
 
 
-def test_save_category_names_merges_existing() -> None:
+def test_save_category_names_overwrites_existing() -> None:
+    with tempfile.TemporaryDirectory(dir=".") as tmp_dir:
+        target = Path(tmp_dir) / "explore_categories.json"
+        save_category_names({"112": "Sports", "207": "Food"}, path=target)
+        save_category_names({"104": "Comedy"}, path=target)
+        # 覆写而非合并：旧 ID 不残留。
+        assert load_category_names(target) == {"104": "Comedy"}
+
+
+def test_save_category_names_rejects_empty_mapping() -> None:
     with tempfile.TemporaryDirectory(dir=".") as tmp_dir:
         target = Path(tmp_dir) / "explore_categories.json"
         save_category_names({"112": "Sports"}, path=target)
-        save_category_names({"104": "Comedy"}, path=target)
-        assert load_category_names(target) == {"112": "Sports", "104": "Comedy"}
+        try:
+            save_category_names({}, path=target)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("空映射应被拒绝")
+        assert load_category_names(target) == {"112": "Sports"}
