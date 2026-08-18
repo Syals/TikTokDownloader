@@ -34,6 +34,25 @@ def test_merge_explore_categories_dedupes_by_id() -> None:
     assert merged == {"120": "All", "112": "Sports", "104": "Comedy"}
 
 
+def test_merge_explore_categories_excludes_v2_dynamic_group() -> None:
+    payload = {
+        "v0": [{"text": "pc_web_explorePage_all", "name": "All", "type": "120"}],
+        "v2": [
+            {
+                "text": "Web_explorePage_dynamicCategories_food",
+                "name": "Food",
+                "type": "207",
+            },
+            {
+                "text": "pc_web_explorePage_topics_technology",
+                "name": "Technology",
+                "type": "215",
+            },
+        ],
+    }
+    assert merge_explore_categories(payload) == {"120": "All"}
+
+
 def test_merge_explore_categories_rejects_malformed_entries() -> None:
     payload = {
         "v0": [

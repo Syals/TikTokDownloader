@@ -21,12 +21,15 @@ def merge_explore_categories(payload: object) -> dict[str, str]:
 
     每项形如 ``{"text": "...", "name": "...", "type": "120"}``，以 ``type`` 为
     分类 ID。同 ID 先到先得（v0 优先），避免不同版本显示名差异。
+
+    v2 分组（``Web_explorePage_dynamicCategories_*``，ID 200+）被整体排除：
+    其 categoryType 请求实际不返回内容，且与 v0/v1 的 pc_web 分类语义重复。
     """
     if not isinstance(payload, dict):
         return {}
     merged: dict[str, str] = {}
-    for entries in payload.values():
-        if not isinstance(entries, list):
+    for group, entries in payload.items():
+        if group == "v2" or not isinstance(entries, list):
             continue
         for entry in entries:
             if not isinstance(entry, dict):
