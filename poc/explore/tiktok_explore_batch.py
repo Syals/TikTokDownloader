@@ -326,9 +326,16 @@ def _collect_stop_reason(report: Sequence[Mapping[str, Any]]) -> str:
             reason += f"；状态字段: {json.dumps(probe, ensure_ascii=False)}"
             status_code = probe.get("statusCode", probe.get("status_code", ""))
             if status_code in ("", "0"):
-                reason += (
-                    "；statusCode=0：请求本身成功，分类内容池为空（非风控/会话问题）"
-                )
+                if last.get("has_more"):
+                    reason += (
+                        "；statusCode=0 且 hasMore=true：服务端有内容但未下发，"
+                        "疑似会话/指纹被降权（非分类池为空）"
+                    )
+                else:
+                    reason += (
+                        "；statusCode=0：请求本身成功，分类内容池为空"
+                        "（非风控/会话问题）"
+                    )
             else:
                 reason += "；statusCode 非 0：疑似风控/限流"
         if "payload_top_keys" in last:

@@ -108,6 +108,20 @@ SESSION_IDENTITY_COOKIE_NAMES = (
     "tt_csrf_token",
 )
 
+# 与被采集账号/会话绑定的 browser_info 字段。当 cookie 被全新匿名会话
+# 整体替换（--require-logged-out）时必须一并删除：残留会拼出矛盾指纹
+# （新匿名 device_id + 旧账号 odinId），Explore 服务端会因此拒发内容
+# （statusCode=0 且无 itemList 的软降权形态）。
+ACCOUNT_BOUND_BROWSER_FIELDS = (
+    "odinId",
+    "verifyFp",
+    "clientABVersions",
+    "is_new_user",
+    "video_encoding",
+    "explore_initial_template",
+    "explore_next_template",
+)
+
 
 def load_settings(path: Path) -> dict:
     if not path.exists():
@@ -292,6 +306,11 @@ def merge_into_settings(
             "device_id": data["device_id"],
         }
     )
+    if replace_cookies:
+        # 匿名会话整体替换 cookie 后，上一账号绑定的字段不可残留，否则
+        # 请求会以新匿名设备身份携带旧账号 odinId/AB 版本/旧 query 模板。
+        for field in ACCOUNT_BOUND_BROWSER_FIELDS:
+            browser_info.pop(field, None)
     # 重新声明锁定的西班牙参数，确保没有陈旧值残留。
     browser_info.update(SPAIN_LOCKED_PARAMS)
     settings["browser_info_tiktok"] = browser_info
