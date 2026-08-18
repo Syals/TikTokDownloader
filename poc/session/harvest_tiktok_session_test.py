@@ -12,6 +12,7 @@ from poc.explore._categories import (  # noqa: E402
     merge_explore_categories,
 )
 from poc.session.harvest_tiktok_session import (  # noqa: E402
+    diff_session_identity,
     extract_ssr_json,
     login_cookie_names,
     merge_into_settings,
@@ -78,3 +79,71 @@ def test_login_cookie_names_includes_all_supported_login_cookies() -> None:
     assert login_cookie_names(
         {"msToken": "ephemeral", "sessionid_ss": "logged-in", "sid_tt": "logged-in"}
     ) == ["sessionid_ss", "sid_tt"]
+
+
+def make_identity_data(device_id: str = "7350000000000000000") -> dict:
+    return {
+        "device_id": device_id,
+        "cookie": {
+            "msToken": "token-1",
+            "sessionid": "session-1",
+            "tt_webid_v2": device_id,
+        },
+    }
+
+
+def test_diff_session_identity_first_write_counts_as_new() -> None:
+    is_new, statuses = diff_session_identity({}, make_identity_data())
+    assert is_new
+    assert set(statuses.values()) == {"absent"}
+
+
+def test_diff_session_identity_detects_rotated_mstoken() -> None:
+    device_id = "7350000000000000000"
+    settings = {
+        "browser_info_tiktok": {"device_id": device_id},
+        "cookie_tiktok": {
+            "msToken": "token-0",
+            "sessionid": "session-1",
+            "tt_webid_v2": device_id,
+        },
+    }
+    is_new, statuses = diff_session_identity(settings, make_identity_data(device_id))
+    assert is_new
+    assert statuses["device_id"] == "unchanged"
+    assert statuses["cookie.msToken"] == "changed"
+    assert statuses["cookie.sessionid"] == "unchanged"
+    assert statuses["cookie.odin_tt"] == "absent"
+
+
+def test_diff_session_identity_identical_data_is_not_new() -> None:
+    data = make_identity_data()
+    settings = {
+        "browser_info_tiktok": {"device_id": data["device_id"]},
+        "cookie_tiktok": dict(data["cookie"]),
+    }
+    is_new, statuses = diff_session_identity(settings, data)
+    assert not is_new
+    assert "changed" not in statuses.values()
+
+
+def test_diff_session_identity_new_device_id_counts_as_new() -> None:
+    settings = {
+        "browser_info_tiktok": {"device_id": "7350000000000000001"},
+        "cookie_tiktok": {"msToken": "token-1"},
+    }
+    is_new, statuses = diff_session_identity(settings, make_identity_data())
+    assert is_new
+    assert statuses["device_id"] == "changed"
+
+
+def test_diff_session_identity_missing_side_is_absent_not_changed() -> None:
+    settings = {
+        "browser_info_tiktok": {"device_id": "7350000000000000000"},
+        "cookie_tiktok": {"msToken": "token-1"},
+    }
+    data = make_identity_data()
+    del data["cookie"]["msToken"]  # 本次未采集到 msToken
+    is_new, statuses = diff_session_identity(settings, data)
+    assert not is_new
+    assert statuses["cookie.msToken"] == "absent"

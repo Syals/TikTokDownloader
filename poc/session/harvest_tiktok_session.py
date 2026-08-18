@@ -22,12 +22,15 @@
        - platform / os    <- navigator.platform
        - browser language <- navigator.language
        - screen size      <- window.screen
-  7. 将采集到的身份合并进 Volume/settings.json：
+  7. 合并前将身份字段（device_id、msToken、sessionid 等）与 settings 中
+     现有数据比对：任一变化即确认采到新会话；--require-change 可在
+     完全一致时中止且不写入。
+  8. 将采集到的身份合并进 Volume/settings.json：
        - cookie_tiktok        <- cookies (name -> value)
        - browser_info_tiktok  <- UA / platform / os / screen / device_id
      西班牙专属参数（app_language=es、region=ES、tz_name=Europe/Madrid、
      ……）会被保留，且在此处绝不被覆盖。
-  8. 使用同一身份签名并发送请求：签名必须用浏览器所用的同一 UA + 参数计算。
+  9. 使用同一身份签名并发送请求：签名必须用浏览器所用的同一 UA + 参数计算。
 
 首次登录：先带 ``--login``（有头）运行一次，在持久化配置内完成 TikTok
 登录，随后正常（无头）重新运行以采集。
@@ -91,6 +94,19 @@ SPAIN_LOCKED_PARAMS = {
     "tz_name": "Europe/Madrid",
 }
 LOGIN_COOKIE_NAMES = frozenset({"sessionid", "sessionid_ss", "sid_tt"})
+
+# 用于判断本次是否真的采到了新会话：任一字段变化即视为新数据。
+# UA / screen 等在同 profile 下恒定，没有判别力，不参与比较。
+SESSION_IDENTITY_COOKIE_NAMES = (
+    "msToken",
+    "sessionid",
+    "sessionid_ss",
+    "sid_tt",
+    "tt_webid_v2",
+    "tt-target-idc",
+    "odin_tt",
+    "tt_csrf_token",
+)
 
 
 def load_settings(path: Path) -> dict:
@@ -282,6 +298,55 @@ def merge_into_settings(
     return settings
 
 
+def diff_session_identity(settings: dict, data: dict) -> tuple[bool, dict[str, str]]:
+    """将新采集的身份字段与 settings 中现有数据比较。
+
+    返回 (是否为新数据, 字段状态)。状态为 "changed" / "unchanged" /
+    "absent"（旧值或新值缺失，不具判别力，不计入变化）。旧数据完全
+    无可比字段时视为首次写入，直接判定为新数据。
+    """
+    old_info = settings.get("browser_info_tiktok")
+    old_cookies = settings.get("cookie_tiktok")
+    old_info = old_info if isinstance(old_info, dict) else {}
+    old_cookies = old_cookies if isinstance(old_cookies, dict) else {}
+
+    fields = [("device_id", old_info.get("device_id"), data["device_id"])]
+    fields.extend(
+        (f"cookie.{name}", old_cookies.get(name), data["cookie"].get(name))
+        for name in SESSION_IDENTITY_COOKIE_NAMES
+    )
+
+    statuses: dict[str, str] = {}
+    for name, old, new in fields:
+        if not old or not new:
+            statuses[name] = "absent"
+        elif str(old) != str(new):
+            statuses[name] = "changed"
+        else:
+            statuses[name] = "unchanged"
+
+    if not any(status != "absent" for status in statuses.values()):
+        return True, statuses
+    return any(status == "changed" for status in statuses.values()), statuses
+
+
+def report_session_diff(is_new: bool, statuses: dict[str, str]) -> None:
+    if not any(status != "absent" for status in statuses.values()):
+        print("[会话比对] settings 中无可比数据，按首次写入处理。")
+        return
+    print("[会话比对] 与 settings 中现有身份数据对比:")
+    for name, status in statuses.items():
+        print(f"    {name:<20} : {status}")
+    if is_new:
+        changed = sum(1 for status in statuses.values() if status == "changed")
+        print(f"[会话比对] 已确认新会话数据（{changed} 项变化）。")
+    else:
+        print(
+            "[会话比对] 警告: 身份字段与上次写入完全一致，"
+            "疑似页面未刷新或读到陈旧会话。"
+        )
+
+
 def login_cookie_names(cookies: Mapping[str, str]) -> list[str]:
     return sorted(name for name in cookies if name.lower() in LOGIN_COOKIE_NAMES)
 
@@ -329,6 +394,14 @@ async def main() -> int:
         "--require-logged-out",
         action="store_true",
         help="拒绝登录 Cookie，并以捕获的 Cookie 覆盖 settings 中的旧会话。",
+    )
+    parser.add_argument(
+        "--require-change",
+        action="store_true",
+        help=(
+            "当身份字段与 settings 现有数据完全一致时中止且不写入，"
+            "用于确认采到的是新会话。"
+        ),
     )
     parser.add_argument(
         "--headed",
@@ -425,6 +498,14 @@ async def main() -> int:
                 return 1
 
             settings = load_settings(args.settings)
+            is_new, statuses = diff_session_identity(settings, data)
+            report_session_diff(is_new, statuses)
+            if not is_new and args.require_change:
+                print(
+                    "[中止] --require-change 生效且未检测到任何变化；"
+                    "settings 与分类映射保持不变。"
+                )
+                return 1
             settings = merge_into_settings(
                 settings, data, replace_cookies=args.require_logged_out
             )
