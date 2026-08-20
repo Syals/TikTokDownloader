@@ -82,7 +82,7 @@ def test_expand_categories_passthrough_non_wildcard() -> None:
 def test_parse_args_default_sentinels() -> None:
     """可配置字段默认 None（哨兵），以支持 CLI > 配置 > 内置默认 的合并。"""
     args = parse_args([])
-    assert args.live is False
+    assert not args.live
     assert args.config is None
     assert args.profile is None
     assert args.categories is None
@@ -99,10 +99,10 @@ def test_parse_args_accepts_category_list() -> None:
 
 
 def test_parse_args_boolean_optional() -> None:
-    assert parse_args(["--no-download"]).download is False
-    assert parse_args(["--download"]).download is True
-    assert parse_args(["--db"]).no_db is False
-    assert parse_args(["--no-db"]).no_db is True
+    assert not parse_args(["--no-download"]).download
+    assert parse_args(["--download"]).download
+    assert not parse_args(["--db"]).no_db
+    assert parse_args(["--no-db"]).no_db
 
 
 def test_parse_args_disk_thresholds() -> None:
@@ -128,8 +128,8 @@ def test_resolve_without_config_uses_builtin_defaults(
     assert resolved["max_retry"] == DEFAULT_MAX_RETRY
     assert resolved["chunk_kb"] == DEFAULT_CHUNK_KB
     assert resolved["url_mode"] == "play_url"
-    assert resolved["download"] is False
-    assert resolved["no_db"] is False
+    assert not resolved["download"]
+    assert not resolved["no_db"]
     assert resolved["output_dir"] == str(DEFAULT_OUTPUT_DIR)
     assert resolved["proxy"] is None
 
@@ -149,7 +149,7 @@ def test_resolve_merges_defaults_then_profile(project_tmp: Path) -> None:
     resolved = resolve_config(parse_args([]), cfg)
     assert resolved["categories"] == "104,112"
     assert resolved["count"] == 10
-    assert resolved["download"] is True
+    assert resolved["download"]
     assert resolved["concurrency"] == 3
     assert resolved["max_pages"] == DEFAULT_MAX_PAGES
 
@@ -163,7 +163,7 @@ def test_resolve_cli_overrides_profile(project_tmp: Path) -> None:
     cfg = load_batch_config(cfg_path, "night")
     resolved = resolve_config(parse_args(["--count", "99", "--no-download"]), cfg)
     assert resolved["count"] == 99
-    assert resolved["download"] is False
+    assert not resolved["download"]
     assert resolved["categories"] == DEFAULT_CATEGORIES
 
 
@@ -460,11 +460,11 @@ def test_maybe_refresh_failure_without_local_fails(
 
 def test_parse_args_refresh_flags() -> None:
     args = parse_args(["--live", "--refresh-categories", "--categories", "104"])
-    assert args.refresh_categories is True
-    assert args.no_refresh_categories is False
+    assert args.refresh_categories
+    assert not args.no_refresh_categories
     args = parse_args(["--live", "--no-refresh-categories"])
-    assert args.refresh_categories is False
-    assert args.no_refresh_categories is True
+    assert not args.refresh_categories
+    assert args.no_refresh_categories
     with pytest.raises(SystemExit):
         parse_args(["--live", "--refresh-categories", "--no-refresh-categories"])
 
@@ -632,6 +632,102 @@ def test_run_batch_aggregates_despite_persist_failure(
     assert summary["119"]["category_name"] == "Singing & Dancing"
     assert "storage_warning" in summary["119"]
     assert "RuntimeError: db unavailable" in summary["119"]["storage_warning"]
+
+
+def test_run_batch_skips_finalized_items_before_download(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """已放弃/已上传终态条目在下载前被剔除:不重复下载、不进入 manifest。"""
+
+    async def fake_collect_explore(
+        *_: Any, **__: Any
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        return (
+            [
+                {"id": "fresh", "category_type": "119"},
+                {"id": "gone", "category_type": "119"},
+                {"id": "done", "category_type": "119"},
+            ],
+            [{"page": 1}],
+        )
+
+    seen_ids: list[str] = []
+
+    async def fake_download_media(
+        _: Any, items: list[dict[str, Any]], **__: Any
+    ) -> list[dict[str, Any]]:
+        seen_ids.extend(str(item["id"]) for item in items)
+        return [
+            {
+                "id": "fresh",
+                "category_type": "119",
+                "ok": True,
+                "media_path": "119/downloads/fresh/fresh.mp4",
+                "bytes": 1,
+            }
+        ]
+
+    async def fake_load_finalized(video_ids: Any) -> set[str]:
+        assert set(video_ids) == {"fresh", "gone", "done"}
+        return {"gone", "done"}
+
+    async def fake_persist_to_db(*_: Any, **__: Any) -> None:
+        return None
+
+    async def fake_upload_pending(**_: Any) -> dict[str, int]:
+        return {"success": 1, "failed": 0, "skipped": 0}
+
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.collect_explore", fake_collect_explore
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.download_media", fake_download_media
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.load_finalized_video_ids",
+        fake_load_finalized,
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_batch.persist_to_db", fake_persist_to_db
+    )
+    monkeypatch.setattr(
+        "src.explore.upload.upload_pending_explore", fake_upload_pending
+    )
+
+    with tempfile.TemporaryDirectory(dir=".") as tmp_dir:
+        metadata, manifest, summary = asyncio.run(
+            run_batch(
+                categories=["119"],
+                category_names={"119": "Singing & Dancing"},
+                device_id="d1",
+                browser_request_params={},
+                browser_templates=None,
+                count=8,
+                max_pages=1,
+                delay=0,
+                category_delay=0,
+                disk_used_percent=0,
+                min_free_gb=0,
+                output_dir=Path(tmp_dir),
+                download=True,
+                url_mode="play_url",
+                concurrency=1,
+                max_retry=1,
+                chunk_size=1024,
+                cookie={},
+                user_agent="test",
+                proxy=None,
+                persist_and_upload=True,
+            )
+        )
+
+    assert seen_ids == ["fresh"]
+    assert len(metadata) == 3
+    assert [record["id"] for record in manifest] == ["fresh"]
+    assert summary["119"]["status"] == "ok"
+    assert summary["119"]["downloaded"] == 1
+    assert "跳过 2 条已放弃/已上传终态条目" in capsys.readouterr().out
 
 
 def test_run_batch_skips_download_when_disk_low(

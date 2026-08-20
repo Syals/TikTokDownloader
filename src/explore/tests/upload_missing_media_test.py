@@ -69,8 +69,8 @@ def test_mark_media_abandoned_sets_terminal_state() -> None:
     asyncio.run(run())
 
 
-def test_update_media_revives_abandoned_and_resets_stale_upload() -> None:
-    """重采下载成功后:已放弃/上传失败卡死的行复活进上传队列;已上传的保持。"""
+def test_update_media_keeps_abandoned_terminal_and_resets_stale_upload() -> None:
+    """下载成功只作用于非终态行:放弃(-1)永久弃用不复活;卡死(2)复位;已上传(1)保持。"""
 
     async def run() -> None:
         engine = create_async_engine("sqlite+aiosqlite:///:memory:")
@@ -105,10 +105,12 @@ def test_update_media_revives_abandoned_and_resets_stale_upload() -> None:
             await session.commit()
 
             repository = TiktokExploreItemRepository(session)
-            for video_id in ("abandoned-video", "stuck-video", "uploaded-video"):
-                assert await repository.update_media(
+            results = {
+                video_id: await repository.update_media(
                     video_id, f"downloads/{video_id}.mp4", 42, 1
                 )
+                for video_id in ("abandoned-video", "stuck-video", "uploaded-video")
+            }
             await session.commit()
 
             rows = {
@@ -116,10 +118,57 @@ def test_update_media_revives_abandoned_and_resets_stale_upload() -> None:
                 for row in await session.scalars(select(TiktokExploreItemModel))
             }
 
-        assert rows["abandoned-video"].is_downloaded == 1
+        # 已放弃为永久终态:重采下载成功也不再回写(返回 False，行保持 -1)。
+        assert results["abandoned-video"] is False
+        assert results["stuck-video"] is True
+        assert results["uploaded-video"] is True
+        assert rows["abandoned-video"].is_downloaded == -1
         assert rows["abandoned-video"].is_uploaded == 0
+        assert rows["abandoned-video"].media_path is None
         assert rows["stuck-video"].is_uploaded == 0
         assert rows["uploaded-video"].is_uploaded == 1
+        await engine.dispose()
+
+    asyncio.run(run())
+
+
+def test_get_finalized_video_ids_returns_abandoned_or_uploaded() -> None:
+    """终态查询:已放弃(-1)与已上传成功(1)入选;待下载/上传失败卡死不入。"""
+
+    async def run() -> None:
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        await _create_tables(engine)
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+        async with session_factory() as session:
+            session.add(
+                TiktokExploreItemModel(
+                    id=1, video_id="abandoned", is_downloaded=-1, is_uploaded=0
+                )
+            )
+            session.add(
+                TiktokExploreItemModel(
+                    id=2, video_id="uploaded", is_downloaded=1, is_uploaded=1
+                )
+            )
+            session.add(
+                TiktokExploreItemModel(
+                    id=3, video_id="pending", is_downloaded=0, is_uploaded=0
+                )
+            )
+            session.add(
+                TiktokExploreItemModel(
+                    id=4, video_id="stuck", is_downloaded=1, is_uploaded=2
+                )
+            )
+            await session.commit()
+
+            repository = TiktokExploreItemRepository(session)
+            finalized = await repository.get_finalized_video_ids(
+                ["abandoned", "uploaded", "pending", "stuck", "missing"]
+            )
+
+        assert finalized == {"abandoned", "uploaded"}
         await engine.dispose()
 
     asyncio.run(run())

@@ -520,8 +520,30 @@ async def persist_to_db(
                 record["id"],
                 record["media_path"] if ok else None,
                 record["bytes"] if ok else None,
-                int(ok),
+                1 if ok else 0,
             )
+
+
+async def load_finalized_video_ids(video_ids: Sequence[str]) -> set[str]:
+    """查询已放弃（-1）或已上传成功（1）的 video_id，供下载前过滤。
+
+    已放弃 = 永久终态（本地磁盘按期清理、CDN 链接时效性），已上传 =
+    文件已在远端，二者重采时都无需再下载。数据库不可用或未配置时
+    返回空集合（不过滤，保持旧行为）；复活防护由 ``update_media``
+    的终态条件兜底。
+    """
+    from src.explore.db import get_tiktok_db_session, init_tiktok_db
+    from src.explore.repository import TiktokExploreItemRepository
+
+    if not video_ids:
+        return set()
+    try:
+        await init_tiktok_db()
+        async with get_tiktok_db_session() as session:
+            repo = TiktokExploreItemRepository(session)
+            return await repo.get_finalized_video_ids(video_ids)
+    except Exception:
+        return set()
 
 
 def positive_int(value: str) -> int:

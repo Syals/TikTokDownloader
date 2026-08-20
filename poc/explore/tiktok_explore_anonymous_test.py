@@ -64,10 +64,10 @@ def test_validate_bootstrap_requires_all_browser_fields_and_templates() -> None:
 
 def test_resolve_config_defaults_to_no_db_and_rejects_all_urls() -> None:
     resolved = resolve_config(parse_args([]), {})
-    assert resolved["no_db"] is True
+    assert resolved["no_db"]
     assert resolved["url_mode"] == "play_url"
-    assert resolved["browser_pages"] is False
-    assert resolve_config(parse_args(["--browser-pages"]), {})["browser_pages"] is True
+    assert not resolved["browser_pages"]
+    assert resolve_config(parse_args(["--browser-pages"]), {})["browser_pages"]
 
     with pytest.raises(AnonymousValidationError, match="一条 media_path"):
         resolve_config(parse_args(["--url-mode", "all"]), {})
@@ -258,6 +258,106 @@ def test_run_batch_deduplicates_media_but_keeps_each_category_metadata(
     assert (project_tmp / "112" / "download_manifest.json").is_file()
 
 
+def test_run_batch_skips_finalized_items_before_download(
+    monkeypatch: pytest.MonkeyPatch, project_tmp: Path
+) -> None:
+    """已放弃/已上传终态条目在下载前被剔除，不再重复下载。"""
+
+    async def fake_collect_explore(
+        *_: Any, **kwargs: Any
+    ) -> tuple[list[dict], list[dict]]:
+        category = kwargs["category_type"]
+        return (
+            [
+                {
+                    "id": "fresh",
+                    "category_type": category,
+                    "play_url": "https://cdn.example/fresh.mp4",
+                },
+                {
+                    "id": "gone",
+                    "category_type": category,
+                    "play_url": "https://cdn.example/gone.mp4",
+                },
+                {
+                    "id": "done",
+                    "category_type": category,
+                    "play_url": "https://cdn.example/done.mp4",
+                },
+            ],
+            [{"http_status": 200, "json": True, "item_count": 3, "has_more": False}],
+        )
+
+    seen_ids: list[str] = []
+
+    async def fake_download_media(_: Any, items: list[dict], **__: Any) -> list[dict]:
+        seen_ids.extend(str(item["id"]) for item in items)
+        return [
+            {
+                "id": item["id"],
+                "category_type": item["category_type"],
+                "media_path": f"downloads/{item['id']}.mp4",
+                "ok": True,
+                "bytes": 1,
+            }
+            for item in items
+        ]
+
+    async def fake_load_finalized(video_ids: Any) -> set[str]:
+        assert set(video_ids) == {"fresh", "gone", "done"}
+        return {"gone", "done"}
+
+    async def fake_persist_to_db(*_: Any, **__: Any) -> None:
+        return None
+
+    async def fake_upload_pending(**_: Any) -> dict[str, int]:
+        return {"success": 1, "failed": 0, "skipped": 0}
+
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_anonymous.collect_explore", fake_collect_explore
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_anonymous.download_media", fake_download_media
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_anonymous.load_finalized_video_ids",
+        fake_load_finalized,
+    )
+    monkeypatch.setattr(
+        "poc.explore.tiktok_explore_anonymous.persist_to_db", fake_persist_to_db
+    )
+    monkeypatch.setattr(
+        "src.explore.upload.upload_pending_explore", fake_upload_pending
+    )
+
+    metadata, manifest, summary = asyncio.run(
+        run_batch(
+            categories=["104"],
+            category_names={"104": "Comedy"},
+            state=_bootstrap(),
+            count=8,
+            max_pages=1,
+            delay=0,
+            category_delay=0,
+            output_dir=project_tmp,
+            download=True,
+            url_mode="play_url",
+            concurrency=1,
+            max_retry=1,
+            chunk_size=1024,
+            proxy=None,
+            persist_and_upload=True,
+        )
+    )
+
+    assert len(metadata) == 3
+    assert seen_ids == ["fresh"]
+    assert [record["id"] for record in manifest] == ["fresh"]
+    assert summary["104"]["status"] == "ok"
+    assert summary["104"]["skipped_finalized"] == 2
+    assert summary["104"]["downloaded"] == 1
+
+
 def test_run_batch_uses_browser_collection_when_enabled(
     monkeypatch: pytest.MonkeyPatch, project_tmp: Path
 ) -> None:
@@ -354,9 +454,9 @@ def test_run_batch_blocks_side_effects_when_evidence_gate_fails(
 
     assert "未提取到任何视频元数据" in str(error.value)
     assert not (project_tmp / "104" / "metadata.json").exists()
-    diagnostic = json.loads(
-        (project_tmp / "104" / "evidence_failure.json").read_text(encoding="utf-8")
-    )
+    diagnostic_path = project_tmp / "104" / "evidence_failure.json"
+    diagnostic_text = diagnostic_path.read_text(encoding="utf-8")
+    diagnostic = json.loads(diagnostic_text)
     assert "未提取到任何视频元数据" in diagnostic["reasons"]
     assert diagnostic["report"][0]["item_count"] == 0
 
@@ -397,8 +497,7 @@ def test_run_batch_records_http_status_errors_from_direct_replay(
         )
 
     assert "HTTPStatusError" in str(error.value)
-    diagnostic = json.loads(
-        (project_tmp / "104" / "evidence_failure.json").read_text(encoding="utf-8")
-    )
+    diagnostic_path = project_tmp / "104" / "evidence_failure.json"
+    diagnostic = json.loads(diagnostic_path.read_text(encoding="utf-8"))
     assert diagnostic["request_error_type"] == "HTTPStatusError"
     assert diagnostic["report"][0]["http_status"] == 403

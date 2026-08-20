@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import pytest
 
 from poc.explore.tiktok_explore_poc import (
     BROWSER_REQUEST_FIELDS,
@@ -15,9 +16,55 @@ from poc.explore.tiktok_explore_poc import (
     initial_cursor,
     load_browser_request_params,
     load_explore_templates,
+    load_finalized_video_ids,
     refresh_session,
 )
 from poc.explore.tiktok_explore_replay import load_device_id
+
+
+def test_load_finalized_video_ids_falls_back_when_db_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """数据库未配置时返回空集合（不过滤、保持旧行为），不向调用方抛错。"""
+    import src.explore.db as db_module
+
+    monkeypatch.delenv("TIKTOK_DATABASE_URL", raising=False)
+    monkeypatch.setattr(db_module, "_engine", None)
+    monkeypatch.setattr(db_module, "_session_factory", None)
+
+    assert asyncio.run(load_finalized_video_ids(["a", "b"])) == set()
+
+
+def test_load_finalized_video_ids_returns_repository_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.explore.db as db_module
+
+    class FakeRepository:
+        def __init__(self, session: object) -> None:
+            pass
+
+        async def get_finalized_video_ids(self, video_ids: Any) -> set[str]:
+            assert list(video_ids) == ["a", "b"]
+            return {"a"}
+
+    class SessionContext:
+        async def __aenter__(self) -> object:
+            return object()
+
+        async def __aexit__(self, *args: Any) -> bool:
+            return False
+
+    async def fake_init() -> None:
+        return None
+
+    monkeypatch.setattr(db_module, "init_tiktok_db", fake_init)
+    monkeypatch.setattr(db_module, "get_tiktok_db_session", lambda: SessionContext())
+    monkeypatch.setattr(
+        "src.explore.repository.TiktokExploreItemRepository", FakeRepository
+    )
+
+    assert asyncio.run(load_finalized_video_ids(["a", "b"])) == {"a"}
 
 
 def test_build_base_params_supports_har_free_explore_requests() -> None:
@@ -90,9 +137,11 @@ def test_build_base_params_uses_empty_from_page_for_following_pages() -> None:
 
 
 def test_initial_cursor_matches_browser_empty_cursor_behavior() -> None:
-    assert initial_cursor({"params": [("aid", "1988")]}) == ""
+    without_cursor = {"params": [("aid", "1988")]}
+    with_cursor = {"params": [("cursor", "next-page")]}
+    assert initial_cursor(without_cursor) == ""
     assert initial_cursor({"params": "invalid"}) == ""
-    assert initial_cursor({"params": [("cursor", "next-page")]}) == "next-page"
+    assert initial_cursor(with_cursor) == "next-page"
 
 
 def test_refresh_session_returns_only_a_new_response_ms_token() -> None:
@@ -137,9 +186,10 @@ def test_fetch_explore_page_records_diagnostics_when_item_list_missing() -> None
     payload, summary = asyncio.run(run())
 
     assert isinstance(payload, dict)
-    assert summary["json"] is True
+    assert summary["json"]
     assert summary["payload_top_keys"] == ["statusCode", "statusMsg"]
-    assert summary["payload_status_probe"] == {
+    probe = summary["payload_status_probe"]
+    assert probe == {
         "statusCode": "10205",
         "statusMsg": "Your IP address is restricted",
     }
@@ -200,7 +250,7 @@ def test_collect_explore_continues_after_missing_initial_item_list(
 
     assert [call["pull_type"] for call in calls] == ["1", "2"]
     assert [item["id"] for item in metadata] == ["video-1"]
-    assert report[0]["item_list_missing"] is True
+    assert report[0]["item_list_missing"]
 
 
 def test_collect_explore_reports_progress_and_new_item_count(
@@ -248,7 +298,8 @@ def test_collect_explore_reports_progress_and_new_item_count(
     )
 
     assert [item["id"] for item in metadata] == ["v1", "v2"]
-    assert progress_events == [(1, 1, 1), (2, 1, 2)]
+    expected_events = [(1, 1, 1), (2, 1, 2)]
+    assert progress_events == expected_events
     assert [page["new_item_count"] for page in report] == [1, 1]
 
 

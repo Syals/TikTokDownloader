@@ -163,15 +163,12 @@ async def upload_pending_explore(
                     layout,
                 )
                 if local is None:
-                    logger.warning(
-                        f"跳过 {video_id}: media_path 为空，标记为已放弃"
-                        "（重采下载成功后会自动复活）"
-                    )
+                    logger.warning(f"跳过 {video_id}: media_path 为空，标记为永久放弃")
                     return video_id, "skipped", None
                 if not local.is_file():
                     logger.warning(
                         f"跳过 {video_id}: 本地文件不存在 {local}，"
-                        "标记为已放弃（重采下载成功后会自动复活）"
+                        "标记为永久放弃（不再重试下载/上传）"
                     )
                     return video_id, "skipped", None
 

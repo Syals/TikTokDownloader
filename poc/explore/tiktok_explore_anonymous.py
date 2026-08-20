@@ -49,6 +49,7 @@ from poc.explore.tiktok_explore_poc import (  # noqa: E402
     download_media,
     extract_explore_pagination,
     flatten_explore_item,
+    load_finalized_video_ids,
     nonnegative_float,
     persist_to_db,
     positive_int,
@@ -438,7 +439,8 @@ def _evidence_gate_diagnostics(
         http_status = first.get("http_status")
         if http_status != 200:
             reasons.append(f"首响应 HTTP 状态={http_status!r}（期望 200）")
-        if first.get("json") is not True:
+        json_flag = first.get("json")
+        if not isinstance(json_flag, bool) or not json_flag:
             reasons.append("首响应不是可解析的 JSON")
         item_count = first.get("item_count")
         if not isinstance(item_count, int) or item_count < 1:
@@ -625,17 +627,31 @@ async def run_batch(
                 duplicates = len(metadata) - len(canonical)
                 seen_video_ids.update(str(item["id"]) for item in canonical)
                 manifest: list[dict[str, Any]] = []
+                downloadable: list[dict[str, Any]] = []
                 if download and canonical:
-                    manifest = await download_media(
-                        client,
-                        canonical,
-                        output_dir=category_dir,
-                        mode=url_mode,
-                        concurrency=concurrency,
-                        max_retry=max_retry,
-                        chunk_size=chunk_size,
-                        user_agent=active_state.user_agent,
-                    )
+                    # 已放弃（-1）/已上传（1）为终态：本地磁盘按期清理且
+                    # CDN 链接有时效，重采不再重复下载这些条目。
+                    downloadable = list(canonical)
+                    if persist_and_upload:
+                        finalized = await load_finalized_video_ids(
+                            [str(item.get("id")) for item in canonical]
+                        )
+                        downloadable = [
+                            item
+                            for item in canonical
+                            if str(item.get("id")) not in finalized
+                        ]
+                    if downloadable:
+                        manifest = await download_media(
+                            client,
+                            downloadable,
+                            output_dir=category_dir,
+                            mode=url_mode,
+                            concurrency=concurrency,
+                            max_retry=max_retry,
+                            chunk_size=chunk_size,
+                            user_agent=active_state.user_agent,
+                        )
 
             save_json(category_dir / "metadata.json", metadata)
             save_json(category_dir / "report.json", report)
@@ -665,6 +681,7 @@ async def run_batch(
                 "pages": len(report),
                 "items": len(metadata),
                 "duplicates": duplicates,
+                "skipped_finalized": len(canonical) - len(downloadable),
                 "downloaded": sum(record["ok"] for record in manifest),
                 "manifest_total": len(manifest),
                 "upload": upload_result,
@@ -672,8 +689,9 @@ async def run_batch(
                 "duration_seconds": round(time() - started_at, 2),
             }
         except Exception as exc:  # noqa: BLE001
-            if index == 0 and isinstance(exc, AnonymousValidationError):
-                raise
+            if isinstance(exc, AnonymousValidationError):
+                if index == 0:
+                    raise
             summary[category_type] = {
                 "category_type": category_type,
                 "category_name": category_name,

@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import case, select, text, update
+from sqlalchemy import case, or_, select, text, update
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -148,6 +148,8 @@ class TiktokExploreItemRepository:
 
         下载成功时把非终态的 ``is_uploaded``（处理中/失败即 2）复位为 0，
         使条目重新进入上传队列；已上传成功（1）保持不变，避免重复上传。
+        已放弃（-1）是永久终态：本地磁盘按期清理、CDN 链接小时级时效，
+        下载一次未上传即弃用，重采不再复活（返回 False，行保持 -1）。
         """
         values: dict[str, Any] = {
             "media_path": media_path,
@@ -161,7 +163,10 @@ class TiktokExploreItemRepository:
             )
         stmt = (
             update(TiktokExploreItemModel)
-            .where(TiktokExploreItemModel.video_id == video_id)
+            .where(
+                TiktokExploreItemModel.video_id == video_id,
+                TiktokExploreItemModel.is_downloaded != -1,
+            )
             .values(**values)
         )
         result = await self.session.execute(stmt)
@@ -190,9 +195,10 @@ class TiktokExploreItemRepository:
         """把本地媒体缺失的条目标记为已放弃终态（``is_downloaded=-1``）。
 
         TikTok CDN 下载链接为小时级时效，跨轮重下必然 403，因此缺失即
-        放弃：条目立即退出上传队列，不再重置回待下载死循环。若未来
-        重采到同一视频并下载成功，``update_media`` 会写回 1 自然复活。
-        同时清空 stale 的本地路径与字节数。
+        放弃：条目立即退出上传队列，不再重置回待下载死循环。放弃是
+        永久终态——本地磁盘按期清理，重采阶段会直接跳过这些条目不再
+        下载（见 ``get_finalized_video_ids``）。同时清空 stale 的本地路径
+        与字节数。
         """
         stmt = (
             update(TiktokExploreItemModel)
@@ -234,6 +240,24 @@ class TiktokExploreItemRepository:
         )
         result = await self.session.execute(stmt)
         return (getattr(result, "rowcount", None) or 0) > 0
+
+    async def get_finalized_video_ids(self, video_ids: Sequence[str]) -> set[str]:
+        """返回已放弃（-1）或已上传成功（1）的 video_id 集合。
+
+        这些条目本地文件已清理或已在远端，重采时无需再下载，供下载
+        阶段过滤，避免无意义的重复下载与后续的放弃告警。
+        """
+        if not video_ids:
+            return set()
+        stmt = select(TiktokExploreItemModel.video_id).where(
+            TiktokExploreItemModel.video_id.in_(video_ids),
+            or_(
+                TiktokExploreItemModel.is_downloaded == -1,
+                TiktokExploreItemModel.is_uploaded == 1,
+            ),
+        )
+        result = await self.session.execute(stmt)
+        return {str(row) for row in result.scalars()}
 
     async def get_pending_upload(
         self,

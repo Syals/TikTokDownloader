@@ -42,6 +42,7 @@ from poc.explore.tiktok_explore_poc import (  # noqa: E402
     download_media,
     load_browser_request_params,
     load_explore_templates,
+    load_finalized_video_ids,
     nonnegative_float,
     persist_to_db,
     positive_int,
@@ -316,7 +317,8 @@ def _collect_stop_reason(report: Sequence[Mapping[str, Any]]) -> str:
     if not report:
         return "无分页响应（未收到任何页面报告）"
     last = report[-1]
-    if last.get("json") is False:
+    json_flag = last.get("json")
+    if isinstance(json_flag, bool) and not json_flag:
         return "响应非 JSON（疑似风控/验证页，需检查 cookie 或代理）"
     if "item_count" not in last:
         return "响应体不是有效 JSON 对象（疑似被拦截）"
@@ -352,7 +354,7 @@ def _collect_stop_reason(report: Sequence[Mapping[str, Any]]) -> str:
 
 
 def _page_progress(
-    category_type: str, category_name: str
+    category_type: str, category_name: str | None
 ) -> Callable[[int, int, int], None]:
     def progress(page: int, new_items: int, total_items: int) -> None:
         _log(
@@ -520,9 +522,27 @@ async def run_batch(
                             f"[{category_type}] {category_name}: 磁盘空间不足，跳过下载"
                         )
                     else:
+                        # 已放弃（-1）/已上传（1）为终态：本地磁盘按期清理且
+                        # CDN 链接有时效，重采不再重复下载这些条目。
+                        downloadable = list(metadata)
+                        if persist_and_upload:
+                            finalized = await load_finalized_video_ids(
+                                [str(item.get("id")) for item in metadata]
+                            )
+                            downloadable = [
+                                item
+                                for item in metadata
+                                if str(item.get("id")) not in finalized
+                            ]
+                        if len(downloadable) < len(metadata):
+                            _log(
+                                f"[{category_type}] {category_name}: 跳过 "
+                                f"{len(metadata) - len(downloadable)} 条已放弃/"
+                                "已上传终态条目（不再重复下载）"
+                            )
                         manifest = await download_media(
                             client,
-                            metadata,
+                            downloadable,
                             output_dir=category_dir,
                             mode=url_mode,
                             concurrency=concurrency,
